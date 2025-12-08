@@ -5,8 +5,13 @@ Herramienta de análisis y visualización para datos de evaluaciones académicas
 ## 🚀 Inicio Rápido
 
 ### Windows:
-1. Doble clic en **`instalar.bat`** (sigue las instrucciones si no tienes Python)
+1. Doble clic en **`instalar.bat`**
 2. Doble clic en **`ejecutar.bat`**
+
+El instalador es **inteligente** y se adapta automáticamente:
+- ✅ Si ya tienes Python → Solo instala las librerías
+- ✅ Si no tienes Python + tienes permisos admin → Lo instala automáticamente
+- ✅ Si no tienes Python + sin permisos admin → Te guía paso a paso
 
 ### Linux/Mac:
 ```bash
