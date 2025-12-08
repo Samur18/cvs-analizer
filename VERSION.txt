@@ -1,0 +1,37 @@
+VERSION=1.0.0
+FECHA=2024-12-08
+NOMBRE=Analizador de Evaluaciones ESO y Primaria
+
+DESCRIPCION=
+Version inicial del programa con interfaz gráfica completa,
+visualizaciones interactivas, exportación a Excel y
+comparaciones entre múltiples cursos académicos.
+
+COMPATIBILIDAD=
+- Python: 3.7 o superior
+- Sistemas: Windows, Linux, macOS, WSL
+- Formato datos: CSV con separador punto y coma (;)
+
+ARCHIVOS_PRINCIPALES=
+- analizador_evaluaciones.py (Programa principal)
+- requirements.txt (Dependencias)
+- instalar.bat, instalar.sh (Instaladores)
+- ejecutar.bat, ejecutar.sh (Ejecutores)
+
+DOCUMENTACION=
+- README.md (Referencia rápida)
+- GUIA_COMPLETA.md (Guía detallada)
+- CHANGELOG.md (Historial de cambios)
+- INSTRUCCIONES_ACTUALIZACION.txt (Cómo actualizar)
+
+DEPENDENCIAS=
+- pandas >= 1.3.0
+- matplotlib >= 3.4.0
+- seaborn >= 0.11.0
+- openpyxl >= 3.0.0
+
+PROXIMO_LANZAMIENTO=
+Aún no programado. Ver CHANGELOG.md para ideas futuras.
+
+CONTACTO=
+Ver README.md para más información.

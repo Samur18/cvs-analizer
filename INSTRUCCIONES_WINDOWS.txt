@@ -1,0 +1,83 @@
+=====================================================
+  INSTRUCCIONES RÁPIDAS PARA USUARIOS DE WINDOWS
+=====================================================
+
+¡Hola! Si estás usando Windows y quieres usar este programa,
+sigue estos 4 pasos simples:
+
+
+PASO 1: INSTALAR
+------------------
+  Haz doble clic en el archivo:
+
+      instalar.bat
+
+  Este archivo instalará automáticamente:
+  - Python (si no lo tienes)
+  - Todas las librerías necesarias
+
+  Solo sigue las instrucciones en pantalla.
+
+
+PASO 2: EJECUTAR
+------------------
+  Una vez instalado todo, haz doble clic en:
+
+      ejecutar.bat
+
+  Esto abrirá el programa automáticamente.
+
+
+PASO 3: USAR EL PROGRAMA
+---------------------------
+  1. Haz clic en "Cargar CSV"
+  2. Selecciona tu archivo de datos
+  3. Explora las pestañas (Resumen, Gráficos, Datos)
+  4. Genera gráficos y exporta a Excel
+
+
+¿NECESITAS MÁS AYUDA?
+-----------------------
+  Lee estos archivos (en orden):
+
+  1. GUIA_WINDOWS.md
+     → Guía completa paso a paso para Windows
+
+  2. GUIA_RAPIDA.md
+     → Tutorial de cómo usar el programa
+
+  3. README.md
+     → Documentación técnica completa
+
+
+¿PROBLEMAS?
+------------
+  Problema 1: "Python no está instalado"
+    → Ejecuta instalar.bat y sigue las instrucciones
+
+  Problema 2: El programa no se abre
+    → Verifica que ejecutaste instalar.bat primero
+
+  Problema 3: Errores al cargar archivos CSV
+    → Asegúrate que tu CSV use punto y coma (;) como separador
+
+
+ARCHIVOS IMPORTANTES PARA WINDOWS:
+------------------------------------
+  instalar.bat          → Para instalar (úsalo primero)
+  ejecutar.bat          → Para ejecutar el programa
+  GUIA_WINDOWS.md       → Guía detallada
+  GUIA_RAPIDA.md        → Tutorial de uso
+  analizador_evaluaciones.py  → El programa principal
+
+
+¡ESO ES TODO!
+--------------
+  1. instalar.bat (doble clic)
+  2. ejecutar.bat (doble clic)
+  3. ¡Listo para analizar tus datos!
+
+
+Para más información, lee: GUIA_WINDOWS.md
+
+=====================================================
