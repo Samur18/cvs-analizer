@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Analizador de Datos Educativos - ESO y Primaria
-Herramienta para analizar evaluaciones académicas y competencias básicas
+🌍 Analizador de Datos Educativos - ESO y Primaria
+Herramienta para analizar evaluaciones académicas, competencias básicas,
+diversidad cultural e inclusión educativa
 """
 
 import pandas as pd
@@ -10,7 +11,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, scrolledtext
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 from enum import Enum
@@ -138,6 +139,124 @@ class AnalizadorEducativo:
 
         resumen = self.df_actual.groupby(col_consecuencias)[col_numero].sum()
         return resumen
+
+    def obtener_estadisticas_aulas_acollida(self):
+        """Obtiene estadísticas de estudiantes en Aulas de Acogida"""
+        if self.df_actual is None:
+            return None
+
+        col_aula_acollida = self.buscar_columna(['Aula', 'acollida'])
+        col_numero = self.buscar_columna(['mero', 'Avalua'])
+
+        if col_aula_acollida is None or col_numero is None:
+            return None
+
+        stats = {}
+
+        # Total por aula de acogida (Sí/No)
+        resumen_aula = self.df_actual.groupby(col_aula_acollida)[col_numero].sum()
+        stats['por_aula_acollida'] = resumen_aula
+
+        # Filtrar estudiantes en aula de acogida
+        df_acollida = self.df_actual[
+            self.df_actual[col_aula_acollida].str.contains('S', na=False, case=False)
+        ]
+
+        if len(df_acollida) > 0:
+            total_acollida = df_acollida[col_numero].sum()
+            total_general = self.df_actual[col_numero].sum()
+
+            stats['total_acollida'] = total_acollida
+            stats['porcentaje_acollida'] = (total_acollida / total_general * 100) if total_general > 0 else 0
+
+            # Por nivel
+            if 'Nivell' in df_acollida.columns:
+                stats['por_nivel'] = df_acollida.groupby('Nivell')[col_numero].sum()
+
+            # Por consecuencias
+            col_consecuencias = self.buscar_columna(['Conseq', 'Avalua'])
+            if col_consecuencias:
+                stats['por_consecuencias'] = df_acollida.groupby(col_consecuencias)[col_numero].sum()
+
+                # Calcular tasa de promoción en aula de acogida
+                promovidos = df_acollida[
+                    df_acollida[col_consecuencias].str.contains('Promociona', na=False)
+                ][col_numero].sum()
+                stats['tasa_promocion_acollida'] = (promovidos / total_acollida * 100) if total_acollida > 0 else 0
+
+        return stats if stats else None
+
+    def obtener_analisis_detallado_aulas_acollida(self):
+        """Obtiene análisis detallado de estudiantes en aulas de acogida:
+        nivel, nacionalidad y consecuencias de evaluación"""
+        if self.df_actual is None:
+            return None
+
+        col_aula = self.buscar_columna(['Aula', 'acollida'])
+        col_numero = self.buscar_columna(['mero', 'Avalua'])
+        col_nacionalidad = self.buscar_columna(['Zona', 'Nacionalitat'])
+        col_nivel = 'Nivell'
+        col_consecuencias = self.buscar_columna(['Conseq', 'Avalua'])
+
+        if col_aula is None or col_numero is None:
+            return None
+
+        # Filtrar solo estudiantes en aulas de acogida
+        df_acollida = self.df_actual[
+            self.df_actual[col_aula].str.contains('S', na=False, case=False)
+        ]
+
+        if len(df_acollida) == 0:
+            return None
+
+        resultado = {}
+
+        # 1. Análisis por nivel
+        if col_nivel in df_acollida.columns:
+            resultado['por_nivel'] = df_acollida.groupby(col_nivel)[col_numero].sum().sort_index()
+
+        # 2. Análisis por nacionalidad
+        if col_nacionalidad:
+            resultado['por_nacionalidad'] = df_acollida.groupby(col_nacionalidad)[col_numero].sum().sort_values(ascending=False)
+
+        # 3. Análisis por consecuencias (promocionan o no)
+        if col_consecuencias:
+            resultado['por_consecuencias'] = df_acollida.groupby(col_consecuencias)[col_numero].sum().sort_values(ascending=False)
+
+            # Clasificar en promocionan vs no promocionan
+            # En catalán: "Accedeix al curs següent" o "Passa de curs" = pasa al siguiente curso
+            # Pero NO "No passa de curs" (no pasa de curso)
+            # También incluye "impossibilitat legal de repetir" que también promociona
+            patron_promocion = r'(?<!No )(?:Accedeix|curs següent|Passa de curs)'
+
+            promovidos = df_acollida[
+                df_acollida[col_consecuencias].str.contains(patron_promocion, na=False, case=False, regex=True)
+            ][col_numero].sum()
+
+            no_promovidos = df_acollida[
+                ~df_acollida[col_consecuencias].str.contains(patron_promocion, na=False, case=False, regex=True)
+            ][col_numero].sum()
+
+            resultado['resumen_promocion'] = {
+                'promocionan': promovidos,
+                'no_promocionan': no_promovidos,
+                'tasa_promocion': (promovidos / (promovidos + no_promovidos) * 100) if (promovidos + no_promovidos) > 0 else 0
+            }
+
+        # 4. Análisis cruzado: nivel x nacionalidad
+        if col_nivel in df_acollida.columns and col_nacionalidad:
+            nivel_nacionalidad = df_acollida.groupby([col_nivel, col_nacionalidad])[col_numero].sum()
+            resultado['nivel_x_nacionalidad'] = nivel_nacionalidad
+
+        # 5. Análisis cruzado: nacionalidad x consecuencias
+        if col_nacionalidad and col_consecuencias:
+            nac_consec = df_acollida.groupby([col_nacionalidad, col_consecuencias])[col_numero].sum()
+            resultado['nacionalidad_x_consecuencias'] = nac_consec
+
+        # 6. Total de estudiantes
+        resultado['total_estudiantes'] = df_acollida[col_numero].sum()
+
+        return resultado
 
     def obtener_estadisticas_sudamerica(self):
         """Obtiene estadísticas específicas de CENTRE I SUDAMÈRICA"""
@@ -313,11 +432,164 @@ class AnalizadorEducativo:
 
         return stats if stats else None
 
+    # ========== MÉTODOS PARA ANÁLISIS DE DIVERSIDAD ====================
+
+    def obtener_resumen_diversidad(self):
+        """Obtiene resumen completo de diversidad"""
+        if self.df_actual is None:
+            return None
+
+        col_nacionalidad = self.buscar_columna(['Zona', 'Nacionalitat'])
+        col_numero = self.buscar_columna(['mero', 'Avalua'])
+
+        if col_nacionalidad is None or col_numero is None:
+            return None
+
+        stats = {}
+
+        # Total general
+        stats['total_estudiantes'] = self.df_actual[col_numero].sum()
+
+        # Españoles vs Extranjeros
+        df_espana = self.df_actual[
+            self.df_actual[col_nacionalidad].str.contains('ESPANYA', na=False, case=False)
+        ]
+        total_espana = df_espana[col_numero].sum()
+        total_extranjeros = stats['total_estudiantes'] - total_espana
+
+        stats['total_espana'] = total_espana
+        stats['total_extranjeros'] = total_extranjeros
+        stats['porcentaje_espana'] = (total_espana / stats['total_estudiantes'] * 100) if stats['total_estudiantes'] > 0 else 0
+        stats['porcentaje_extranjeros'] = (total_extranjeros / stats['total_estudiantes'] * 100) if stats['total_estudiantes'] > 0 else 0
+
+        # Top nacionalidades
+        resumen_nacionalidad = self.df_actual.groupby(col_nacionalidad)[col_numero].sum()
+        stats['top_nacionalidades'] = resumen_nacionalidad.sort_values(ascending=False)
+
+        return stats
+
+    def obtener_comparativa_grupos(self):
+        """Obtiene comparativa de rendimiento entre grupos culturales"""
+        if self.df_actual is None:
+            return None
+
+        col_nacionalidad = self.buscar_columna(['Zona', 'Nacionalitat'])
+        col_numero = self.buscar_columna(['mero', 'Avalua'])
+        col_consecuencias = self.buscar_columna(['Conseq', 'Avalua'])
+
+        if col_nacionalidad is None or col_numero is None or col_consecuencias is None:
+            return None
+
+        # Definir grupos culturales
+        grupos = {
+            'ESPAÑA': ['ESPANYA'],
+            'MAGREB': ['MAGREB'],
+            'AMÉRICA': ['CENTRE I SUDAM', 'AMÈRICA'],
+            'EUROPA': ['RESTA UNIÓ EUROPEA', 'EUROPA'],
+            'ASIA/OCEANÍA': ['ÀSIA', 'OCEANIA'],
+            'RESTO ÁFRICA': ['RESTA ÀFRICA'],
+        }
+
+        resultados = {}
+
+        for grupo, patrones in grupos.items():
+            # Filtrar por grupo
+            mascara = pd.Series([False] * len(self.df_actual))
+            for patron in patrones:
+                mascara |= self.df_actual[col_nacionalidad].str.contains(patron, na=False, case=False)
+
+            df_grupo = self.df_actual[mascara]
+
+            if len(df_grupo) > 0:
+                total = df_grupo[col_numero].sum()
+                promovidos = df_grupo[
+                    df_grupo[col_consecuencias].str.contains('Promociona', na=False)
+                ][col_numero].sum()
+                repiten = df_grupo[
+                    df_grupo[col_consecuencias].str.contains('Repeteix', na=False)
+                ][col_numero].sum()
+
+                resultados[grupo] = {
+                    'total': total,
+                    'promovidos': promovidos,
+                    'tasa_promocion': (promovidos / total * 100) if total > 0 else 0,
+                    'repiten': repiten,
+                    'tasa_repeticion': (repiten / total * 100) if total > 0 else 0
+                }
+
+        return resultados if resultados else None
+
+    def obtener_analisis_por_centro(self, codigo_centro=None):
+        """Obtiene análisis por centro educativo"""
+        if self.df_actual is None:
+            return None
+
+        col_centro = self.buscar_columna(['Centre', 'Codi'])
+        col_numero = self.buscar_columna(['mero', 'Avalua'])
+        col_nacionalidad = self.buscar_columna(['Zona', 'Nacionalitat'])
+        col_aula = self.buscar_columna(['Aula', 'acollida'])
+
+        if col_centro is None or col_numero is None:
+            return None
+
+        if codigo_centro:
+            # Análisis de un centro específico
+            df_centro = self.df_actual[self.df_actual[col_centro] == codigo_centro]
+
+            if len(df_centro) == 0:
+                return None
+
+            stats = {
+                'total_estudiantes': df_centro[col_numero].sum(),
+                'registros': len(df_centro)
+            }
+
+            if col_nacionalidad:
+                stats['por_nacionalidad'] = df_centro.groupby(col_nacionalidad)[col_numero].sum()
+
+            if col_aula:
+                df_acollida = df_centro[
+                    df_centro[col_aula].str.contains('S', na=False, case=False)
+                ]
+                stats['en_aula_acollida'] = df_acollida[col_numero].sum() if len(df_acollida) > 0 else 0
+
+            return stats
+        else:
+            # Top centros diversos
+            if col_nacionalidad:
+                # Calcular % extranjeros por centro
+                centros_stats = []
+
+                for centro in self.df_actual[col_centro].unique():
+                    df_centro = self.df_actual[self.df_actual[col_centro] == centro]
+                    total_centro = df_centro[col_numero].sum()
+
+                    if total_centro >= 50:  # Solo centros con al menos 50 estudiantes
+                        df_espana = df_centro[
+                            df_centro[col_nacionalidad].str.contains('ESPANYA', na=False, case=False)
+                        ]
+                        total_espana = df_espana[col_numero].sum()
+                        total_extranjeros = total_centro - total_espana
+                        porcentaje_extranjeros = (total_extranjeros / total_centro * 100) if total_centro > 0 else 0
+
+                        centros_stats.append({
+                            'centro': centro,
+                            'total': total_centro,
+                            'extranjeros': total_extranjeros,
+                            'porcentaje': porcentaje_extranjeros
+                        })
+
+                # Ordenar por % extranjeros
+                centros_stats.sort(key=lambda x: x['porcentaje'], reverse=True)
+                return centros_stats[:20]  # Top 20
+
+            return None
+
 
 class VentanaAnalisis:
     def __init__(self, root):
         self.root = root
-        self.root.title("Analizador de Datos Educativos - ESO y Primaria")
+        self.root.title("🌍 Analizador de Datos Educativos - Diversidad e Inclusión")
         self.root.geometry("1400x900")
 
         self.analizador = AnalizadorEducativo()
@@ -331,21 +603,24 @@ class VentanaAnalisis:
         frame_superior.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N))
 
         # Botones de carga
-        ttk.Button(frame_superior, text="Cargar CSV",
+        ttk.Button(frame_superior, text="📁 Cargar CSV",
                    command=self.cargar_archivo).grid(row=0, column=0, padx=5)
 
-        ttk.Button(frame_superior, text="Cargar Múltiples CSV",
+        ttk.Button(frame_superior, text="📂 Cargar Múltiples CSV",
                    command=self.cargar_multiples_archivos).grid(row=0, column=1, padx=5)
+
+        ttk.Button(frame_superior, text="🗑️ Limpiar Datos",
+                   command=self.limpiar_datos).grid(row=0, column=2, padx=5)
 
         # Label de archivo actual
         self.label_archivo = ttk.Label(frame_superior, text="Ningún archivo cargado",
                                        font=('Arial', 10, 'bold'))
-        self.label_archivo.grid(row=0, column=2, padx=20)
+        self.label_archivo.grid(row=0, column=3, padx=20)
 
         # Label de tipo de CSV
         self.label_tipo = ttk.Label(frame_superior, text="",
                                     font=('Arial', 9), foreground='blue')
-        self.label_tipo.grid(row=0, column=3, padx=10)
+        self.label_tipo.grid(row=0, column=4, padx=10)
 
         # Frame central - Notebook con pestañas
         self.notebook = ttk.Notebook(self.root)
@@ -355,11 +630,15 @@ class VentanaAnalisis:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(1, weight=1)
 
-        # Crear pestañas
+        # Crear pestañas (ahora con enfoque en diversidad e inclusión)
         self.crear_pestana_resumen()
         self.crear_pestana_visualizaciones()
         self.crear_pestana_datos()
         self.crear_pestana_comparaciones()
+        self.crear_pestana_aulas_acogida_detalle()
+        self.crear_pestana_diversidad_cultural()
+        self.crear_pestana_comparativa_grupos()
+        self.crear_pestana_analisis_centros()
 
     def crear_pestana_resumen(self):
         """Crea la pestaña de resumen estadístico"""
@@ -464,9 +743,13 @@ class VentanaAnalisis:
             ttk.Button(self.frame_controles_graficos, text="Gráfico por Nacionalidad",
                        command=self.grafico_por_nacionalidad).grid(row=0, column=2, padx=5)
 
+            # NUEVO: Botón para Aulas de Acogida
+            ttk.Button(self.frame_controles_graficos, text="🏫 Aulas de Acogida",
+                       command=self.grafico_aulas_acollida).grid(row=0, column=3, padx=5)
+
             # NUEVO: Botón específico para Sudamérica
             ttk.Button(self.frame_controles_graficos, text="📊 Análisis Sudamérica",
-                       command=self.grafico_sudamerica_evaluacion).grid(row=0, column=3, padx=5)
+                       command=self.grafico_sudamerica_evaluacion).grid(row=0, column=4, padx=5)
 
         elif self.analizador.tipo_csv_actual == TipoCSV.COMPETENCIAS:
             # Botones para CSV de Competencias
@@ -545,6 +828,60 @@ class VentanaAnalisis:
             self.actualizar_botones_graficos()
             self.actualizar_botones_comparacion()
 
+    def limpiar_datos(self):
+        """Limpia todos los datos cargados y reinicia la interfaz"""
+        # Confirmar con el usuario
+        respuesta = messagebox.askyesno(
+            "Confirmar limpieza",
+            "¿Estás seguro de que quieres borrar todos los datos cargados?\n\n"
+            "Esta acción no se puede deshacer."
+        )
+
+        if not respuesta:
+            return
+
+        # Limpiar datos del analizador
+        self.analizador.dataframes = {}
+        self.analizador.df_actual = None
+        self.analizador.nombre_archivo_actual = None
+        self.analizador.tipo_csv_actual = TipoCSV.DESCONOCIDO
+
+        # Actualizar labels
+        self.label_archivo.config(text="Ningún archivo cargado")
+        self.label_tipo.config(text="")
+
+        # Limpiar todas las pestañas
+        self.texto_resumen.delete(1.0, tk.END)
+        self.texto_resumen.insert(tk.END, "No hay datos cargados")
+
+        self.texto_datos.delete(1.0, tk.END)
+        self.texto_datos.insert(tk.END, "No hay datos cargados")
+
+        # Limpiar frames de visualización
+        for widget in self.frame_graficos.winfo_children():
+            widget.destroy()
+
+        for widget in self.frame_comparacion.winfo_children():
+            widget.destroy()
+
+        for widget in self.frame_contenido_aulas_detalle.winfo_children():
+            widget.destroy()
+
+        for widget in self.frame_contenido_diversidad.winfo_children():
+            widget.destroy()
+
+        for widget in self.frame_contenido_grupos.winfo_children():
+            widget.destroy()
+
+        for widget in self.frame_contenido_centros.winfo_children():
+            widget.destroy()
+
+        # Actualizar filtros
+        self.actualizar_filtros()
+
+        # Mensaje de confirmación
+        messagebox.showinfo("Limpieza completada", "Todos los datos han sido eliminados correctamente")
+
     def actualizar_resumen(self):
         """Actualiza el texto del resumen estadístico"""
         self.texto_resumen.delete(1.0, tk.END)
@@ -616,6 +953,36 @@ class VentanaAnalisis:
         if resumen_consec is not None:
             for consec, total in resumen_consec.items():
                 texto += f"  {consec}: {total:,} estudiantes\n"
+
+        # NUEVA SECCIÓN: Análisis de Aulas de Acogida
+        texto += f"\n{'='*70}\n"
+        texto += "🏫 ANÁLISIS: AULAS DE ACOGIDA\n"
+        texto += f"{'='*70}\n"
+
+        stats_acollida = self.analizador.obtener_estadisticas_aulas_acollida()
+        if stats_acollida and 'total_acollida' in stats_acollida:
+            texto += f"\nTotal estudiantes en Aulas de Acogida: {stats_acollida['total_acollida']:,}\n"
+            texto += f"Porcentaje del total: {stats_acollida['porcentaje_acollida']:.2f}%\n"
+
+            if 'tasa_promocion_acollida' in stats_acollida:
+                texto += f"Tasa de promoción: {stats_acollida['tasa_promocion_acollida']:.2f}%\n"
+
+            if 'por_nivel' in stats_acollida:
+                texto += f"\nDistribución por nivel:\n"
+                for nivel, total in stats_acollida['por_nivel'].items():
+                    texto += f"  Nivel {nivel}: {total:,} estudiantes\n"
+
+            if 'por_consecuencias' in stats_acollida:
+                texto += f"\nPrincipales consecuencias:\n"
+                top_consec = stats_acollida['por_consecuencias'].sort_values(ascending=False).head(5)
+                for consec, total in top_consec.items():
+                    texto += f"  {consec}: {total:,}\n"
+        elif stats_acollida and 'por_aula_acollida' in stats_acollida:
+            texto += f"\nResumen general:\n"
+            for aula, total in stats_acollida['por_aula_acollida'].items():
+                texto += f"  {aula}: {total:,} estudiantes\n"
+        else:
+            texto += "\nNo hay datos de Aulas de Acogida en este archivo.\n"
 
         # NUEVA SECCIÓN: Análisis específico de CENTRE I SUDAMÈRICA
         texto += f"\n{'='*70}\n"
@@ -803,6 +1170,88 @@ class VentanaAnalisis:
                    ha='left', va='center', fontsize=9)
 
         plt.tight_layout()
+
+        # Integrar en tkinter
+        canvas = FigureCanvasTkAgg(fig, master=self.frame_grafico)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def grafico_aulas_acollida(self):
+        """Genera gráfico para Aulas de Acogida"""
+        if self.analizador.df_actual is None:
+            messagebox.showwarning("Advertencia", "No hay datos cargados")
+            return
+
+        stats_acollida = self.analizador.obtener_estadisticas_aulas_acollida()
+        if not stats_acollida or 'total_acollida' not in stats_acollida:
+            messagebox.showwarning("Advertencia", "No hay datos de Aulas de Acogida en este archivo")
+            return
+
+        # Limpiar frame anterior
+        for widget in self.frame_grafico.winfo_children():
+            widget.destroy()
+
+        # Crear figura con 3 subplots
+        fig = plt.figure(figsize=(14, 10))
+        gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
+        ax1 = fig.add_subplot(gs[0, :])  # Gráfico superior ocupa toda la fila
+        ax2 = fig.add_subplot(gs[1, 0])
+        ax3 = fig.add_subplot(gs[1, 1])
+
+        # Gráfico 1: Resumen general (Sí vs No)
+        if 'por_aula_acollida' in stats_acollida:
+            resumen = stats_acollida['por_aula_acollida']
+            colores = ['#ff6b6b' if 'S' in str(idx) else '#51cf66' for idx in resumen.index]
+            bars = ax1.bar(resumen.index, resumen.values, color=colores, edgecolor='black', linewidth=1.5)
+            ax1.set_title('Estudiantes en Aulas de Acogida - Resumen General',
+                         fontsize=14, fontweight='bold')
+            ax1.set_ylabel('Número de Estudiantes', fontsize=12)
+            ax1.set_xlabel('Aula de Acogida', fontsize=12)
+            ax1.grid(axis='y', alpha=0.3)
+
+            for bar, valor in zip(bars, resumen.values):
+                height = bar.get_height()
+                porcentaje = (valor / resumen.sum() * 100)
+                ax1.text(bar.get_x() + bar.get_width()/2., height + max(resumen.values)*0.02,
+                        f'{int(valor):,}\n({porcentaje:.1f}%)',
+                        ha='center', va='bottom', fontsize=11, fontweight='bold')
+
+        # Gráfico 2: Distribución por nivel (solo estudiantes en aula de acogida)
+        if 'por_nivel' in stats_acollida:
+            resumen_nivel = stats_acollida['por_nivel'].sort_index()
+            bars2 = ax2.bar(resumen_nivel.index, resumen_nivel.values, color='coral', edgecolor='darkred')
+            ax2.set_title('Distribución por Nivel\n(Aulas de Acogida)', fontsize=12, fontweight='bold')
+            ax2.set_xlabel('Nivel', fontsize=11)
+            ax2.set_ylabel('Número de Estudiantes', fontsize=11)
+            ax2.grid(axis='y', alpha=0.3)
+
+            for bar, valor in zip(bars2, resumen_nivel.values):
+                height = bar.get_height()
+                ax2.text(bar.get_x() + bar.get_width()/2., height + max(resumen_nivel.values)*0.02,
+                        f'{int(valor):,}', ha='center', va='bottom', fontsize=9)
+
+        # Gráfico 3: Indicadores clave
+        categorias = ['% del Total', 'Tasa Promoción']
+        valores = [
+            stats_acollida.get('porcentaje_acollida', 0),
+            stats_acollida.get('tasa_promocion_acollida', 0)
+        ]
+        colores_indicadores = ['#4dabf7', '#ffd43b']
+        bars3 = ax3.bar(categorias, valores, color=colores_indicadores, edgecolor='black', linewidth=1.5)
+        ax3.set_title('Indicadores Aulas de Acogida', fontsize=12, fontweight='bold')
+        ax3.set_ylabel('Porcentaje (%)', fontsize=11)
+        ax3.set_ylim(0, 100)
+        ax3.grid(axis='y', alpha=0.3)
+
+        for bar, valor in zip(bars3, valores):
+            height = bar.get_height()
+            ax3.text(bar.get_x() + bar.get_width()/2., height + 2,
+                    f'{valor:.1f}%', ha='center', va='bottom', fontsize=11, fontweight='bold')
+
+        # Añadir información adicional como texto
+        info_text = f"Total estudiantes en Aulas de Acogida: {stats_acollida['total_acollida']:,}"
+        fig.text(0.5, 0.02, info_text, ha='center', fontsize=11,
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
         # Integrar en tkinter
         canvas = FigureCanvasTkAgg(fig, master=self.frame_grafico)
@@ -1320,6 +1769,734 @@ class VentanaAnalisis:
         canvas = FigureCanvasTkAgg(fig, master=self.frame_comparacion)
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    # ==================== PESTAÑA 5: AULAS DE ACOGIDA DETALLADO ====================
+
+    def crear_pestana_aulas_acogida_detalle(self):
+        """Crea la pestaña de análisis detallado de aulas de acogida"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="🏫 Aulas Acogida Detalle")
+
+        # Frame de controles
+        frame_controles = ttk.Frame(frame)
+        frame_controles.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+
+        ttk.Button(frame_controles, text="📊 Análisis Completo",
+                   command=self.mostrar_analisis_completo_aulas).grid(row=0, column=0, padx=5)
+        ttk.Button(frame_controles, text="📈 Por Nivel y Nacionalidad",
+                   command=self.grafico_nivel_nacionalidad_aulas).grid(row=0, column=1, padx=5)
+        ttk.Button(frame_controles, text="✅ Promoción por Nacionalidad",
+                   command=self.grafico_promocion_por_nacionalidad_aulas).grid(row=0, column=2, padx=5)
+        ttk.Button(frame_controles, text="📊 Tabla Detallada",
+                   command=self.mostrar_tabla_detallada_aulas).grid(row=0, column=3, padx=5)
+
+        # Frame para contenido
+        self.frame_contenido_aulas_detalle = ttk.Frame(frame)
+        self.frame_contenido_aulas_detalle.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+    def mostrar_analisis_completo_aulas(self):
+        """Muestra análisis textual completo de aulas de acogida"""
+        for widget in self.frame_contenido_aulas_detalle.winfo_children():
+            widget.destroy()
+
+        texto_widget = scrolledtext.ScrolledText(self.frame_contenido_aulas_detalle, wrap=tk.WORD, font=('Courier', 10))
+        texto_widget.pack(fill=tk.BOTH, expand=True)
+
+        datos = self.analizador.obtener_analisis_detallado_aulas_acollida()
+        if not datos:
+            texto_widget.insert(tk.END, "No hay datos de aulas de acogida")
+            return
+
+        texto = ""
+        texto += "="*80 + "\n"
+        texto += "🏫 ANÁLISIS DETALLADO: ESTUDIANTES EN AULAS DE ACOGIDA\n"
+        texto += "="*80 + "\n\n"
+
+        texto += f"Total de estudiantes: {int(datos['total_estudiantes']):,}\n\n"
+
+        # 1. Por nivel (curso)
+        if 'por_nivel' in datos:
+            texto += "="*80 + "\n"
+            texto += "📚 DISTRIBUCIÓN POR NIVEL (CURSO)\n"
+            texto += "="*80 + "\n"
+            for nivel, total in datos['por_nivel'].items():
+                porcentaje = (total / datos['total_estudiantes'] * 100)
+                texto += f"  Nivel {nivel}: {int(total):>4,} estudiantes ({porcentaje:5.1f}%)\n"
+            texto += "\n"
+
+        # 2. Por nacionalidad
+        if 'por_nacionalidad' in datos:
+            texto += "="*80 + "\n"
+            texto += "🌍 DISTRIBUCIÓN POR NACIONALIDAD\n"
+            texto += "="*80 + "\n"
+            for nac, total in datos['por_nacionalidad'].head(10).items():
+                porcentaje = (total / datos['total_estudiantes'] * 100)
+                texto += f"  {nac:40s} {int(total):>4,} ({porcentaje:5.1f}%)\n"
+            texto += "\n"
+
+        # 3. Por consecuencias (¿Pasan de curso?)
+        if 'resumen_promocion' in datos:
+            texto += "="*80 + "\n"
+            texto += "✅ ¿PASAN DE CURSO?\n"
+            texto += "="*80 + "\n"
+            prom = datos['resumen_promocion']
+            texto += f"  SÍ promocionan:  {int(prom['promocionan']):>4,} estudiantes\n"
+            texto += f"  NO promocionan:  {int(prom['no_promocionan']):>4,} estudiantes\n"
+            texto += f"  Tasa de éxito:   {prom['tasa_promocion']:>5.1f}%\n"
+            texto += "\n"
+
+        if 'por_consecuencias' in datos:
+            texto += "Detalle de consecuencias:\n"
+            for consec, total in datos['por_consecuencias'].head(5).items():
+                texto += f"  • {consec}: {int(total):,}\n"
+            texto += "\n"
+
+        # 4. Análisis cruzado: nivel x nacionalidad
+        if 'nivel_x_nacionalidad' in datos:
+            texto += "="*80 + "\n"
+            texto += "📊 CRUCE: NIVEL x NACIONALIDAD (Top combinaciones)\n"
+            texto += "="*80 + "\n"
+            top_cruces = datos['nivel_x_nacionalidad'].sort_values(ascending=False).head(10)
+            for (nivel, nac), total in top_cruces.items():
+                texto += f"  Nivel {nivel} + {nac}: {int(total):,}\n"
+
+        texto_widget.insert(tk.END, texto)
+
+    def grafico_nivel_nacionalidad_aulas(self):
+        """Gráfico de distribución por nivel y nacionalidad"""
+        for widget in self.frame_contenido_aulas_detalle.winfo_children():
+            widget.destroy()
+
+        datos = self.analizador.obtener_analisis_detallado_aulas_acollida()
+        if not datos or 'nivel_x_nacionalidad' not in datos:
+            messagebox.showwarning("Advertencia", "No hay datos suficientes")
+            return
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+        # Gráfico 1: Por nivel
+        if 'por_nivel' in datos:
+            niveles = datos['por_nivel']
+            bars = ax1.bar(range(len(niveles)), niveles.values, color='#4dabf7', edgecolor='black')
+            ax1.set_xticks(range(len(niveles)))
+            ax1.set_xticklabels(niveles.index)
+            ax1.set_title('📚 Estudiantes por Nivel', fontsize=12, fontweight='bold')
+            ax1.set_xlabel('Nivel', fontsize=11)
+            ax1.set_ylabel('Número de Estudiantes', fontsize=11)
+            ax1.grid(axis='y', alpha=0.3)
+
+            for bar, valor in zip(bars, niveles.values):
+                ax1.text(bar.get_x() + bar.get_width()/2., valor,
+                        f'{int(valor)}', ha='center', va='bottom', fontsize=10)
+
+        # Gráfico 2: Top 8 nacionalidades
+        if 'por_nacionalidad' in datos:
+            top_nac = datos['por_nacionalidad'].head(8)
+            colors = plt.cm.Oranges(np.linspace(0.4, 0.9, len(top_nac)))
+            bars = ax2.barh(range(len(top_nac)), top_nac.values, color=colors, edgecolor='black')
+            ax2.set_yticks(range(len(top_nac)))
+            ax2.set_yticklabels([nac[:25] for nac in top_nac.index])
+            ax2.set_title('🌍 Top 8 Nacionalidades', fontsize=12, fontweight='bold')
+            ax2.set_xlabel('Número de Estudiantes', fontsize=11)
+            ax2.grid(axis='x', alpha=0.3)
+
+            for i, valor in enumerate(top_nac.values):
+                ax2.text(valor + max(top_nac.values)*0.01, i,
+                        f'{int(valor)}', ha='left', va='center', fontsize=9)
+
+        plt.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=self.frame_contenido_aulas_detalle)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def grafico_promocion_por_nacionalidad_aulas(self):
+        """Gráfico de tasas de promoción por nacionalidad en aulas de acogida"""
+        for widget in self.frame_contenido_aulas_detalle.winfo_children():
+            widget.destroy()
+
+        datos = self.analizador.obtener_analisis_detallado_aulas_acollida()
+        if not datos or 'nacionalidad_x_consecuencias' not in datos:
+            messagebox.showwarning("Advertencia", "No hay datos suficientes")
+            return
+
+        # Calcular tasa de promoción por nacionalidad
+        nac_consec = datos['nacionalidad_x_consecuencias']
+
+        tasas_por_nac = {}
+        for (nac, consec), total in nac_consec.items():
+            if nac not in tasas_por_nac:
+                tasas_por_nac[nac] = {'total': 0, 'promocionan': 0}
+
+            tasas_por_nac[nac]['total'] += total
+
+            # En catalán: "Accedeix", "curs següent" o "Passa de curs" = promociona
+            # Pero NO "No passa de curs" (no pasa de curso)
+            if ('Accedeix' in consec or 'curs següent' in consec.lower() or 'Passa de curs' in consec) and 'No passa' not in consec:
+                tasas_por_nac[nac]['promocionan'] += total
+
+        # Calcular porcentajes
+        for nac in tasas_por_nac:
+            total = tasas_por_nac[nac]['total']
+            prom = tasas_por_nac[nac]['promocionan']
+            tasas_por_nac[nac]['tasa'] = (prom / total * 100) if total > 0 else 0
+
+        # Ordenar por total de estudiantes y tomar top 8
+        tasas_ordenadas = sorted(tasas_por_nac.items(),
+                                key=lambda x: x[1]['total'],
+                                reverse=True)[:8]
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+        nacionalidades = [nac for nac, _ in tasas_ordenadas]
+        tasas = [datos['tasa'] for _, datos in tasas_ordenadas]
+        totales = [datos['total'] for _, datos in tasas_ordenadas]
+
+        # Gráfico 1: Tasas de promoción
+        colores = ['#51cf66' if tasa >= 90 else '#ff8c42' if tasa >= 75 else '#ff6b6b' for tasa in tasas]
+        bars1 = ax1.barh(range(len(nacionalidades)), tasas, color=colores, edgecolor='black')
+        ax1.set_yticks(range(len(nacionalidades)))
+        ax1.set_yticklabels([nac[:25] for nac in nacionalidades])
+        ax1.set_xlabel('Tasa de Promoción (%)', fontsize=11)
+        ax1.set_title('✅ Tasa de Promoción por Nacionalidad', fontsize=12, fontweight='bold')
+        ax1.set_xlim(0, 100)
+        ax1.grid(axis='x', alpha=0.3)
+        ax1.axvline(x=90, color='gray', linestyle='--', alpha=0.5)
+
+        for i, tasa in enumerate(tasas):
+            ax1.text(tasa + 1, i, f'{tasa:.1f}%',
+                    ha='left', va='center', fontsize=9, fontweight='bold')
+
+        # Gráfico 2: Total de estudiantes por nacionalidad
+        bars2 = ax2.barh(range(len(nacionalidades)), totales, color='#4dabf7', edgecolor='black')
+        ax2.set_yticks(range(len(nacionalidades)))
+        ax2.set_yticklabels([nac[:25] for nac in nacionalidades])
+        ax2.set_xlabel('Número de Estudiantes', fontsize=11)
+        ax2.set_title('📊 Total de Estudiantes', fontsize=12, fontweight='bold')
+        ax2.grid(axis='x', alpha=0.3)
+
+        for i, total in enumerate(totales):
+            ax2.text(total + max(totales)*0.01, i, f'{int(total)}',
+                    ha='left', va='center', fontsize=9)
+
+        plt.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=self.frame_contenido_aulas_detalle)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def mostrar_tabla_detallada_aulas(self):
+        """Muestra tabla detallada con nivel, nacionalidad y promoción"""
+        for widget in self.frame_contenido_aulas_detalle.winfo_children():
+            widget.destroy()
+
+        texto_widget = scrolledtext.ScrolledText(self.frame_contenido_aulas_detalle, wrap=tk.WORD, font=('Courier', 9))
+        texto_widget.pack(fill=tk.BOTH, expand=True)
+
+        datos = self.analizador.obtener_analisis_detallado_aulas_acollida()
+        if not datos or 'nivel_x_nacionalidad' not in datos:
+            texto_widget.insert(tk.END, "No hay datos suficientes para tabla detallada")
+            return
+
+        texto = ""
+        texto += "="*95 + "\n"
+        texto += "📋 TABLA DETALLADA: NIVEL x NACIONALIDAD\n"
+        texto += "="*95 + "\n\n"
+
+        texto += f"{'Nivel':<8} {'Nacionalidad':<40} {'Estudiantes':>12}\n"
+        texto += "-"*95 + "\n"
+
+        # Mostrar todos los cruces ordenados por nivel y luego por total
+        nivel_nac = datos['nivel_x_nacionalidad'].sort_index()
+
+        for (nivel, nac), total in nivel_nac.items():
+            texto += f"{nivel:<8} {nac[:40]:<40} {int(total):>12,}\n"
+
+        texto += "\n" + "="*95 + "\n"
+        texto += f"TOTAL: {int(datos['total_estudiantes']):,} estudiantes\n"
+        texto += "="*95 + "\n"
+
+        texto_widget.insert(tk.END, texto)
+
+    # ==================== PESTAÑA 6: DIVERSIDAD CULTURAL ====================
+
+    def crear_pestana_diversidad_cultural(self):
+        """Crea la pestaña de diversidad cultural"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="🌍 Diversidad Cultural")
+
+        # Frame de controles
+        frame_controles = ttk.Frame(frame)
+        frame_controles.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+
+        ttk.Button(frame_controles, text="📊 Resumen Diversidad",
+                   command=self.mostrar_resumen_diversidad).grid(row=0, column=0, padx=5)
+        ttk.Button(frame_controles, text="🥧 Gráfico Circular",
+                   command=self.grafico_circular_diversidad).grid(row=0, column=1, padx=5)
+        ttk.Button(frame_controles, text="📊 Top 10 Orígenes",
+                   command=self.grafico_top_origenes).grid(row=0, column=2, padx=5)
+        ttk.Button(frame_controles, text="📈 Evolución por Nivel",
+                   command=self.grafico_diversidad_por_nivel).grid(row=0, column=3, padx=5)
+
+        # Frame para contenido
+        self.frame_contenido_diversidad = ttk.Frame(frame)
+        self.frame_contenido_diversidad.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+    def mostrar_resumen_diversidad(self):
+        """Muestra resumen de diversidad"""
+        for widget in self.frame_contenido_diversidad.winfo_children():
+            widget.destroy()
+
+        texto_widget = scrolledtext.ScrolledText(self.frame_contenido_diversidad, wrap=tk.WORD, font=('Courier', 10))
+        texto_widget.pack(fill=tk.BOTH, expand=True)
+
+        stats = self.analizador.obtener_resumen_diversidad()
+        if not stats:
+            texto_widget.insert(tk.END, "No hay datos disponibles")
+            return
+
+        texto = ""
+        texto += "="*70 + "\n"
+        texto += "🌍 RESUMEN DE DIVERSIDAD CULTURAL\n"
+        texto += "="*70 + "\n\n"
+
+        texto += f"Total estudiantes: {int(stats['total_estudiantes']):,}\n"
+        texto += f"Españoles: {int(stats['total_espana']):,} ({stats['porcentaje_espana']:.1f}%)\n"
+        texto += f"Extranjeros: {int(stats['total_extranjeros']):,} ({stats['porcentaje_extranjeros']:.1f}%)\n\n"
+
+        texto += "TOP 10 NACIONALIDADES:\n"
+        texto += "-"*70 + "\n"
+        for i, (origen, total) in enumerate(stats['top_nacionalidades'].head(10).items(), 1):
+            porcentaje = (total / stats['total_estudiantes'] * 100)
+            texto += f"{i:2d}. {origen:40s} {int(total):8,} ({porcentaje:5.2f}%)\n"
+
+        texto_widget.insert(tk.END, texto)
+
+    def grafico_circular_diversidad(self):
+        """Gráfico circular de diversidad"""
+        for widget in self.frame_contenido_diversidad.winfo_children():
+            widget.destroy()
+
+        stats = self.analizador.obtener_resumen_diversidad()
+        if not stats:
+            messagebox.showwarning("Advertencia", "No hay datos disponibles")
+            return
+
+        fig, ax = plt.subplots(figsize=(10, 8))
+
+        # Top 7 + Otros
+        top7 = stats['top_nacionalidades'].head(7)
+        otros = stats['top_nacionalidades'][7:].sum()
+
+        labels = list(top7.index) + ['Otros']
+        sizes = list(top7.values) + [otros]
+
+        # Colores
+        colors = plt.cm.Set3(range(len(labels)))
+
+        # Explotar España
+        explode = [0.1 if 'ESPANYA' in label else 0 for label in labels]
+
+        ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90,
+               colors=colors, explode=explode, shadow=True)
+        ax.set_title('🥧 Distribución por Nacionalidad', fontsize=14, fontweight='bold')
+
+        plt.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=self.frame_contenido_diversidad)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def grafico_top_origenes(self):
+        """Gráfico Top 10 orígenes"""
+        for widget in self.frame_contenido_diversidad.winfo_children():
+            widget.destroy()
+
+        stats = self.analizador.obtener_resumen_diversidad()
+        if not stats:
+            messagebox.showwarning("Advertencia", "No hay datos disponibles")
+            return
+
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        top10 = stats['top_nacionalidades'].head(10)
+
+        bars = ax.barh(range(len(top10)), top10.values,
+                      color=plt.cm.viridis(np.linspace(0.3, 0.9, len(top10))))
+        ax.set_yticks(range(len(top10)))
+        ax.set_yticklabels(top10.index)
+        ax.set_title('📊 Top 10 Orígenes', fontsize=14, fontweight='bold')
+        ax.set_xlabel('Número de Estudiantes', fontsize=12)
+        ax.grid(axis='x', alpha=0.3)
+
+        for i, (bar, valor) in enumerate(zip(bars, top10.values)):
+            porcentaje = (valor / stats['total_estudiantes'] * 100)
+            ax.text(valor + max(top10.values)*0.01, i,
+                   f'{int(valor):,} ({porcentaje:.1f}%)',
+                   ha='left', va='center', fontsize=10)
+
+        plt.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=self.frame_contenido_diversidad)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def grafico_diversidad_por_nivel(self):
+        """Gráfico de evolución de diversidad por nivel"""
+        for widget in self.frame_contenido_diversidad.winfo_children():
+            widget.destroy()
+
+        if self.analizador.df_actual is None:
+            messagebox.showwarning("Advertencia", "No hay datos cargados")
+            return
+
+        col_nivel = 'Nivell'
+        col_nacionalidad = self.analizador.buscar_columna(['Zona', 'Nacionalitat'])
+        col_numero = self.analizador.buscar_columna(['mero', 'Avalua'])
+
+        if col_nacionalidad is None or col_numero is None or col_nivel not in self.analizador.df_actual.columns:
+            messagebox.showwarning("Advertencia", "Columnas necesarias no encontradas")
+            return
+
+        fig, ax = plt.subplots(figsize=(12, 7))
+
+        # Obtener top 6 nacionalidades
+        top6 = self.analizador.df_actual.groupby(col_nacionalidad)[col_numero].sum().sort_values(ascending=False).head(6).index
+
+        # Preparar datos por nivel
+        niveles = sorted(self.analizador.df_actual[col_nivel].unique())
+        datos_por_nac = {nac: [] for nac in top6}
+
+        for nivel in niveles:
+            df_nivel = self.analizador.df_actual[self.analizador.df_actual[col_nivel] == nivel]
+            for nac in top6:
+                total = df_nivel[df_nivel[col_nacionalidad] == nac][col_numero].sum()
+                datos_por_nac[nac].append(total)
+
+        # Crear gráfico de barras apiladas
+        x = np.arange(len(niveles))
+        width = 0.6
+
+        bottom = np.zeros(len(niveles))
+        colors = plt.cm.tab10(range(len(top6)))
+
+        for i, (nac, valores) in enumerate(datos_por_nac.items()):
+            ax.bar(x, valores, width, label=nac, bottom=bottom, color=colors[i])
+            bottom += valores
+
+        ax.set_xlabel('Nivel', fontsize=12)
+        ax.set_ylabel('Número de Estudiantes', fontsize=12)
+        ax.set_title('📈 Evolución de Diversidad por Nivel', fontsize=14, fontweight='bold')
+        ax.set_xticks(x)
+        ax.set_xticklabels(niveles)
+        ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+        ax.grid(axis='y', alpha=0.3)
+
+        plt.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=self.frame_contenido_diversidad)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    # ==================== PESTAÑA 6: COMPARATIVA GRUPOS ====================
+
+    def crear_pestana_comparativa_grupos(self):
+        """Crea la pestaña de comparativa entre grupos culturales"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="⚖️ Comparativa Grupos")
+
+        frame_controles = ttk.Frame(frame)
+        frame_controles.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+
+        ttk.Button(frame_controles, text="📊 Tabla Comparativa",
+                   command=self.mostrar_tabla_comparativa).grid(row=0, column=0, padx=5)
+        ttk.Button(frame_controles, text="📈 Tasas de Promoción",
+                   command=self.grafico_tasas_promocion).grid(row=0, column=1, padx=5)
+        ttk.Button(frame_controles, text="📉 Brechas Educativas",
+                   command=self.grafico_brechas).grid(row=0, column=2, padx=5)
+
+        self.frame_contenido_comparativa = ttk.Frame(frame)
+        self.frame_contenido_comparativa.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+    def mostrar_tabla_comparativa(self):
+        """Muestra tabla comparativa de grupos"""
+        for widget in self.frame_contenido_comparativa.winfo_children():
+            widget.destroy()
+
+        texto_widget = scrolledtext.ScrolledText(self.frame_contenido_comparativa, wrap=tk.WORD, font=('Courier', 10))
+        texto_widget.pack(fill=tk.BOTH, expand=True)
+
+        stats = self.analizador.obtener_comparativa_grupos()
+        if not stats:
+            texto_widget.insert(tk.END, "No hay datos disponibles")
+            return
+
+        texto = ""
+        texto += "="*90 + "\n"
+        texto += "⚖️ TABLA COMPARATIVA DE GRUPOS CULTURALES\n"
+        texto += "="*90 + "\n\n"
+
+        texto += f"{'Grupo':<20} {'Total':>10} {'Promocionan':>12} {'Tasa %':>8} {'Repiten':>10} {'Tasa %':>8}\n"
+        texto += "-"*90 + "\n"
+
+        for grupo, datos in stats.items():
+            texto += f"{grupo:<20} "
+            texto += f"{int(datos['total']):>10,} "
+            texto += f"{int(datos['promovidos']):>12,} "
+            texto += f"{datos['tasa_promocion']:>8.1f} "
+            texto += f"{int(datos['repiten']):>10,} "
+            texto += f"{datos['tasa_repeticion']:>8.1f}\n"
+
+        texto_widget.insert(tk.END, texto)
+
+    def grafico_tasas_promocion(self):
+        """Gráfico de tasas de promoción"""
+        for widget in self.frame_contenido_comparativa.winfo_children():
+            widget.destroy()
+
+        stats = self.analizador.obtener_comparativa_grupos()
+        if not stats:
+            messagebox.showwarning("Advertencia", "No hay datos disponibles")
+            return
+
+        fig, ax = plt.subplots(figsize=(12, 7))
+
+        grupos = list(stats.keys())
+        tasas = [stats[g]['tasa_promocion'] for g in grupos]
+
+        # Colores según tasa (verde si > 85%, rojo si < 85%)
+        colores = ['#51cf66' if tasa >= 85 else '#ff6b6b' for tasa in tasas]
+
+        bars = ax.barh(range(len(grupos)), tasas, color=colores, edgecolor='black')
+        ax.set_yticks(range(len(grupos)))
+        ax.set_yticklabels(grupos)
+        ax.set_xlabel('Tasa de Promoción (%)', fontsize=12)
+        ax.set_title('📈 Tasas de Promoción por Grupo Cultural', fontsize=14, fontweight='bold')
+        ax.set_xlim(0, 100)
+        ax.grid(axis='x', alpha=0.3)
+
+        # Línea de referencia en 85%
+        ax.axvline(x=85, color='gray', linestyle='--', linewidth=2, alpha=0.5)
+
+        for i, (bar, tasa) in enumerate(zip(bars, tasas)):
+            ax.text(tasa + 1, i, f'{tasa:.1f}%',
+                   ha='left', va='center', fontsize=10, fontweight='bold')
+
+        plt.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=self.frame_contenido_comparativa)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def grafico_brechas(self):
+        """Gráfico de brechas educativas"""
+        for widget in self.frame_contenido_comparativa.winfo_children():
+            widget.destroy()
+
+        stats = self.analizador.obtener_comparativa_grupos()
+        if not stats:
+            messagebox.showwarning("Advertencia", "No hay datos disponibles")
+            return
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
+
+        grupos = list(stats.keys())
+        tasas_promocion = [stats[g]['tasa_promocion'] for g in grupos]
+        tasas_repeticion = [stats[g]['tasa_repeticion'] for g in grupos]
+
+        # Calcular medias
+        media_promocion = np.mean(tasas_promocion)
+        media_repeticion = np.mean(tasas_repeticion)
+
+        # Brechas
+        brechas_promocion = [tasa - media_promocion for tasa in tasas_promocion]
+        brechas_repeticion = [tasa - media_repeticion for tasa in tasas_repeticion]
+
+        # Gráfico 1: Brecha de promoción
+        colores1 = ['#51cf66' if b >= 0 else '#ff6b6b' for b in brechas_promocion]
+        bars1 = ax1.barh(range(len(grupos)), brechas_promocion, color=colores1, edgecolor='black')
+        ax1.set_yticks(range(len(grupos)))
+        ax1.set_yticklabels(grupos)
+        ax1.set_xlabel('Diferencia con la Media (puntos)', fontsize=11)
+        ax1.set_title('📉 Brecha de Promoción', fontsize=12, fontweight='bold')
+        ax1.axvline(x=0, color='black', linestyle='-', linewidth=1)
+        ax1.grid(axis='x', alpha=0.3)
+
+        for i, (bar, brecha) in enumerate(zip(bars1, brechas_promocion)):
+            ax1.text(brecha + (0.2 if brecha >= 0 else -0.2), i,
+                    f'{brecha:+.1f}', ha='left' if brecha >= 0 else 'right',
+                    va='center', fontsize=9, fontweight='bold')
+
+        # Gráfico 2: Brecha de repetición
+        colores2 = ['#ff6b6b' if b >= 0 else '#51cf66' for b in brechas_repeticion]
+        bars2 = ax2.barh(range(len(grupos)), brechas_repeticion, color=colores2, edgecolor='black')
+        ax2.set_yticks(range(len(grupos)))
+        ax2.set_yticklabels(grupos)
+        ax2.set_xlabel('Diferencia con la Media (puntos)', fontsize=11)
+        ax2.set_title('📉 Brecha de Repetición', fontsize=12, fontweight='bold')
+        ax2.axvline(x=0, color='black', linestyle='-', linewidth=1)
+        ax2.grid(axis='x', alpha=0.3)
+
+        for i, (bar, brecha) in enumerate(zip(bars2, brechas_repeticion)):
+            ax2.text(brecha + (0.05 if brecha >= 0 else -0.05), i,
+                    f'{brecha:+.1f}', ha='left' if brecha >= 0 else 'right',
+                    va='center', fontsize=9, fontweight='bold')
+
+        plt.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=self.frame_contenido_comparativa)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    # ==================== PESTAÑA 7: ANÁLISIS POR CENTRO ====================
+
+    def crear_pestana_analisis_centros(self):
+        """Crea la pestaña de análisis por centro educativo"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="🏢 Análisis por Centro")
+
+        # Frame de búsqueda
+        frame_busqueda = ttk.LabelFrame(frame, text="🔍 Buscar Centro", padding="10")
+        frame_busqueda.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
+
+        ttk.Label(frame_busqueda, text="Código de Centro:").grid(row=0, column=0, padx=5)
+        self.entry_codigo_centro = ttk.Entry(frame_busqueda, width=15)
+        self.entry_codigo_centro.grid(row=0, column=1, padx=5)
+        ttk.Button(frame_busqueda, text="Buscar",
+                   command=self.buscar_centro).grid(row=0, column=2, padx=5)
+
+        # Frame de controles
+        frame_controles = ttk.Frame(frame)
+        frame_controles.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+
+        ttk.Button(frame_controles, text="📊 Top Centros Diversos",
+                   command=self.mostrar_top_centros_diversos).grid(row=0, column=0, padx=5)
+        ttk.Button(frame_controles, text="🏫 Centros con Aulas Acogida",
+                   command=self.mostrar_centros_aulas).grid(row=0, column=1, padx=5)
+
+        self.frame_contenido_centros = ttk.Frame(frame)
+        self.frame_contenido_centros.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+    def buscar_centro(self):
+        """Busca un centro específico"""
+        for widget in self.frame_contenido_centros.winfo_children():
+            widget.destroy()
+
+        codigo = self.entry_codigo_centro.get().strip()
+        if not codigo:
+            messagebox.showwarning("Advertencia", "Ingresa un código de centro")
+            return
+
+        # Convertir a int si es posible
+        try:
+            codigo = int(codigo)
+        except:
+            pass
+
+        stats = self.analizador.obtener_analisis_por_centro(codigo)
+
+        if not stats:
+            messagebox.showinfo("No encontrado", f"No se encontró el centro {codigo}")
+            return
+
+        # Mostrar resultados
+        texto_widget = scrolledtext.ScrolledText(self.frame_contenido_centros, wrap=tk.WORD, font=('Courier', 10))
+        texto_widget.pack(fill=tk.BOTH, expand=True)
+
+        texto = ""
+        texto += "="*70 + "\n"
+        texto += f"🏢 ANÁLISIS DEL CENTRO: {codigo}\n"
+        texto += "="*70 + "\n\n"
+
+        texto += f"Total de estudiantes: {int(stats['total_estudiantes']):,}\n"
+        texto += f"Total de registros: {stats['registros']:,}\n\n"
+
+        if 'en_aula_acollida' in stats:
+            texto += f"Estudiantes en aulas de acogida: {int(stats['en_aula_acollida']):,}\n\n"
+
+        if 'por_nacionalidad' in stats:
+            texto += "DISTRIBUCIÓN POR NACIONALIDAD:\n"
+            texto += "-"*70 + "\n"
+            for origen, total in stats['por_nacionalidad'].sort_values(ascending=False).items():
+                porcentaje = (total / stats['total_estudiantes'] * 100)
+                texto += f"  {origen:40s} {int(total):6,} ({porcentaje:5.1f}%)\n"
+
+        texto_widget.insert(tk.END, texto)
+
+    def mostrar_top_centros_diversos(self):
+        """Muestra top centros más diversos"""
+        for widget in self.frame_contenido_centros.winfo_children():
+            widget.destroy()
+
+        centros = self.analizador.obtener_analisis_por_centro()
+
+        if not centros:
+            messagebox.showwarning("Advertencia", "No hay datos disponibles")
+            return
+
+        texto_widget = scrolledtext.ScrolledText(self.frame_contenido_centros, wrap=tk.WORD, font=('Courier', 10))
+        texto_widget.pack(fill=tk.BOTH, expand=True)
+
+        texto = ""
+        texto += "="*80 + "\n"
+        texto += "📊 TOP 20 CENTROS MÁS DIVERSOS\n"
+        texto += "="*80 + "\n\n"
+
+        texto += f"{'#':<4} {'Centro':<12} {'Total':>10} {'Extranjeros':>12} {'% Extran.':>10}\n"
+        texto += "-"*80 + "\n"
+
+        for i, centro in enumerate(centros[:20], 1):
+            texto += f"{i:<4} {str(centro['centro']):<12} "
+            texto += f"{int(centro['total']):>10,} "
+            texto += f"{int(centro['extranjeros']):>12,} "
+            texto += f"{centro['porcentaje']:>10.1f}%\n"
+
+        texto_widget.insert(tk.END, texto)
+
+    def mostrar_centros_aulas(self):
+        """Muestra centros con más estudiantes en aulas de acogida"""
+        for widget in self.frame_contenido_centros.winfo_children():
+            widget.destroy()
+
+        if self.analizador.df_actual is None:
+            messagebox.showwarning("Advertencia", "No hay datos cargados")
+            return
+
+        col_centro = self.analizador.buscar_columna(['Centre', 'Codi'])
+        col_aula = self.analizador.buscar_columna(['Aula', 'acollida'])
+        col_numero = self.analizador.buscar_columna(['mero', 'Avalua'])
+
+        if not all([col_centro, col_aula, col_numero]):
+            messagebox.showwarning("Advertencia", "Columnas necesarias no encontradas")
+            return
+
+        # Filtrar solo estudiantes en aulas de acogida
+        df_acollida = self.analizador.df_actual[
+            self.analizador.df_actual[col_aula].str.contains('S', na=False, case=False)
+        ]
+
+        if len(df_acollida) == 0:
+            messagebox.showinfo("Info", "No hay estudiantes en aulas de acogida")
+            return
+
+        # Agrupar por centro
+        centros_aulas = df_acollida.groupby(col_centro)[col_numero].sum().sort_values(ascending=False)
+
+        texto_widget = scrolledtext.ScrolledText(self.frame_contenido_centros, wrap=tk.WORD, font=('Courier', 10))
+        texto_widget.pack(fill=tk.BOTH, expand=True)
+
+        texto = ""
+        texto += "="*70 + "\n"
+        texto += "🏫 TOP 20 CENTROS CON MÁS ESTUDIANTES EN AULAS DE ACOGIDA\n"
+        texto += "="*70 + "\n\n"
+
+        texto += f"{'#':<4} {'Centro':<12} {'Estudiantes':>15}\n"
+        texto += "-"*70 + "\n"
+
+        for i, (centro, total) in enumerate(centros_aulas.head(20).items(), 1):
+            texto += f"{i:<4} {str(centro):<12} {int(total):>15,}\n"
+
+        texto_widget.insert(tk.END, texto)
 
 
 def main():

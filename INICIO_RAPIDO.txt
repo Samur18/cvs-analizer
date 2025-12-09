@@ -1,0 +1,153 @@
+═══════════════════════════════════════════════════════════════════════
+🌍 ANALIZADOR DE DATOS EDUCATIVOS - INICIO RÁPIDO
+═══════════════════════════════════════════════════════════════════════
+
+✅ UN SOLO PROGRAMA CON TODO INTEGRADO:
+
+   analizador_evaluaciones.py   → Análisis completo (8 pestañas)
+
+
+═══════════════════════════════════════════════════════════════════════
+🚀 CÓMO EJECUTAR
+═══════════════════════════════════════════════════════════════════════
+
+OPCIÓN 1: Doble clic
+─────────────────────
+• Busca el archivo "analizador_evaluaciones.py"
+• Haz doble clic sobre él
+• Se abrirá la ventana del programa
+
+
+OPCIÓN 2: Desde línea de comandos
+──────────────────────────────────
+Abre terminal en esta carpeta y ejecuta:
+
+    python analizador_evaluaciones.py
+
+O si tienes Python 3:
+
+    python3 analizador_evaluaciones.py
+
+O usando el entorno virtual (RECOMENDADO):
+
+    ./venv/bin/python analizador_evaluaciones.py
+
+
+═══════════════════════════════════════════════════════════════════════
+📁 CARGAR DATOS
+═══════════════════════════════════════════════════════════════════════
+
+1. Clic en "📁 Cargar CSV"
+2. Navegar a la carpeta:
+   "Dades 2025_10_Misaki Kamiya"
+3. Seleccionar un archivo, ejemplo:
+   "Dades avaluació ESO curs 2023-2024.csv"
+4. Clic en "Abrir"
+
+
+═══════════════════════════════════════════════════════════════════════
+🎯 QUÉ HACER DESPUÉS
+═══════════════════════════════════════════════════════════════════════
+
+PESTAÑA 1: 🏫 Aulas Acogida Detalle ⭐ NUEVO
+──────────────────────────────────────────
+• Clic en "📊 Análisis Completo"       → Ver resumen completo textual
+• Clic en "📈 Por Nivel y Nacionalidad"→ Ver gráficos de distribución
+• Clic en "✅ Promoción por Nacionalidad"→ Ver tasas de éxito
+• Clic en "📋 Tabla Detallada"         → Ver tabla nivel × nacionalidad
+
+
+PESTAÑA 2: 🌍 Diversidad Cultural
+───────────────────────────────────
+• Clic en "📊 Resumen Diversidad"     → Ver españoles vs extranjeros
+• Clic en "🥧 Gráfico Circular"       → Ver distribución visual
+• Clic en "📊 Top 10 Orígenes"        → Ver principales nacionalidades
+• Clic en "📈 Evolución por Nivel"    → Ver cambios por nivel
+
+
+PESTAÑA 3: ⚖️ Comparativa Grupos
+──────────────────────────────────
+• Clic en "📊 Tabla Comparativa"      → Ver todos los grupos
+• Clic en "📈 Tasas de Promoción"     → Ver rendimiento por grupo
+• Clic en "📉 Brechas Educativas"     → Ver diferencias con la media
+
+
+PESTAÑA 4: 🏢 Análisis por Centro
+──────────────────────────────────
+• Ingresar código de centro (ej: 8000013)
+• Clic en "Buscar"                    → Ver análisis del centro
+• Clic en "📊 Top Centros Diversos"   → Ver ranking de centros
+• Clic en "🏫 Centros con Aulas"      → Ver centros con acogida
+
+
+═══════════════════════════════════════════════════════════════════════
+💡 EJEMPLOS DE USO
+═══════════════════════════════════════════════════════════════════════
+
+CASO 1: ¿Cuántos extranjeros hay en mi centro?
+  → Pestaña "🏢 Análisis por Centro"
+  → Ingresar tu código de centro
+  → Ver distribución de nacionalidades
+
+CASO 2: ¿Qué grupos tienen peor rendimiento?
+  → Pestaña "⚖️ Comparativa Grupos"
+  → Clic en "📉 Brechas Educativas"
+  → Ver grupos por debajo de la media (en rojo)
+
+CASO 3: ¿Cuál es la nacionalidad más común?
+  → Pestaña "🌍 Diversidad Cultural"
+  → Clic en "📊 Top 10 Orígenes"
+  → Ver el ranking visual
+
+CASO 4: ¿Mi centro es diverso?
+  → Pestaña "🏢 Análisis por Centro"
+  → Clic en "📊 Top Centros Diversos"
+  → Buscar tu centro en el ranking
+
+
+═══════════════════════════════════════════════════════════════════════
+📚 MÁS INFORMACIÓN
+═══════════════════════════════════════════════════════════════════════
+
+• README_DIVERSIDAD.md    → Guía completa con todos los detalles
+• RESUMEN_FINAL.md        → Resumen ejecutivo del proyecto
+• test_diversidad.py      → Para verificar que todo funciona
+
+
+═══════════════════════════════════════════════════════════════════════
+🧪 VERIFICAR INSTALACIÓN
+═══════════════════════════════════════════════════════════════════════
+
+Ejecuta en terminal:
+
+    python test_diversidad.py
+
+Si ves "🎉 ¡TODAS LAS FUNCIONALIDADES FUNCIONAN CORRECTAMENTE!"
+entonces todo está listo para usar.
+
+
+═══════════════════════════════════════════════════════════════════════
+❓ PROBLEMAS COMUNES
+═══════════════════════════════════════════════════════════════════════
+
+PROBLEMA: "No module named 'pandas'"
+SOLUCIÓN: Instalar dependencias
+    pip install pandas matplotlib seaborn openpyxl
+
+PROBLEMA: "No se pudo decodificar el archivo"
+SOLUCIÓN: El programa probará automáticamente diferentes codificaciones
+
+PROBLEMA: "No hay datos disponibles"
+SOLUCIÓN: Asegúrate de cargar primero un archivo CSV de evaluación
+
+
+═══════════════════════════════════════════════════════════════════════
+✨ ¡LISTO PARA EMPEZAR!
+═══════════════════════════════════════════════════════════════════════
+
+Comando para empezar:
+
+    python analizador_diversidad.py
+
+¡Que disfrutes analizando la diversidad e inclusión educativa! 🌍
+═══════════════════════════════════════════════════════════════════════
