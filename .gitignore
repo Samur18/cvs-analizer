@@ -1,46 +1,11 @@
-# Python
+# Archivos de test
+test_*.py
+*.pyc
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-
-# Virtual Environment
-venv/
-env/
-ENV/
-.venv
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Backup files
-*.backup
-*.bak
-
-# Datos sensibles (CSV con datos reales)
-*.csv
-
-# Archivos de Excel generados
-*.xlsx
-
-# Logs
-*.log
-
-# Pytest
 .pytest_cache/
-.coverage
-htmlcov/
 
-# Distribution / packaging
-build/
-dist/
-*.egg-info/
+# Backups
+*.backup
+
+# Archivos temporales
+nul
