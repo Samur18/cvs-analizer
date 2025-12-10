@@ -502,11 +502,17 @@ class AnalizadorEducativo:
 
             if len(df_grupo) > 0:
                 total = df_grupo[col_numero].sum()
+
+                # En catalán: "Accedeix", "curs següent" o "Passa de curs" = promociona
+                # Pero NO "No passa de curs" (no pasa de curso)
+                patron_promocion = r'(?<!No )(?:Accedeix|curs següent|Passa de curs)'
                 promovidos = df_grupo[
-                    df_grupo[col_consecuencias].str.contains('Promociona', na=False)
+                    df_grupo[col_consecuencias].str.contains(patron_promocion, na=False, case=False, regex=True)
                 ][col_numero].sum()
+
+                # Repiten: buscar "Repeteix" o "Repetir" o "No passa"
                 repiten = df_grupo[
-                    df_grupo[col_consecuencias].str.contains('Repeteix', na=False)
+                    df_grupo[col_consecuencias].str.contains('Repeteix|Repetir|No passa', na=False, case=False, regex=True)
                 ][col_numero].sum()
 
                 resultados[grupo] = {
@@ -1851,7 +1857,39 @@ class VentanaAnalisis:
                 texto += f"  • {consec}: {int(total):,}\n"
             texto += "\n"
 
-        # 4. Análisis cruzado: nivel x nacionalidad
+        # 4. Análisis cruzado: NACIONALIDAD x CONSECUENCIAS
+        if 'nacionalidad_x_consecuencias' in datos:
+            texto += "="*80 + "\n"
+            texto += "🌍 ANÁLISIS DETALLADO POR NACIONALIDAD Y TIPO DE PROGRESIÓN\n"
+            texto += "="*80 + "\n\n"
+
+            nac_consec = datos['nacionalidad_x_consecuencias']
+
+            # Agrupar por tipo de consecuencia
+            consecuencias_dict = {}
+            for (nac, consec), total in nac_consec.items():
+                if consec not in consecuencias_dict:
+                    consecuencias_dict[consec] = []
+                consecuencias_dict[consec].append((nac, int(total)))
+
+            # Mostrar cada tipo de consecuencia con sus nacionalidades
+            for consec, nacionalidades in sorted(consecuencias_dict.items(),
+                                                key=lambda x: sum([n[1] for n in x[1]]),
+                                                reverse=True):
+                total_consec = sum([n[1] for n in nacionalidades])
+                texto += f"📋 {consec}\n"
+                texto += f"   Total: {total_consec} estudiantes\n"
+                texto += "-"*80 + "\n"
+
+                # Ordenar nacionalidades por número de estudiantes
+                nacionalidades_ordenadas = sorted(nacionalidades, key=lambda x: x[1], reverse=True)
+
+                for nac, total in nacionalidades_ordenadas:
+                    porcentaje = (total / total_consec * 100)
+                    texto += f"   • {nac:45s} {total:>3,} estudiantes ({porcentaje:5.1f}%)\n"
+                texto += "\n"
+
+        # 5. Análisis cruzado: nivel x nacionalidad
         if 'nivel_x_nacionalidad' in datos:
             texto += "="*80 + "\n"
             texto += "📊 CRUCE: NIVEL x NACIONALIDAD (Top combinaciones)\n"
