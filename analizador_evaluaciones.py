@@ -224,17 +224,23 @@ class AnalizadorEducativo:
             resultado['por_consecuencias'] = df_acollida.groupby(col_consecuencias)[col_numero].sum().sort_values(ascending=False)
 
             # Clasificar en promocionan vs no promocionan
-            # En catalán: "Accedeix al curs següent" o "Passa de curs" = pasa al siguiente curso
-            # Pero NO "No passa de curs" (no pasa de curso)
-            # También incluye "impossibilitat legal de repetir" que también promociona
-            patron_promocion = r'(?<!No )(?:Accedeix|curs següent|Passa de curs)'
+            # En catalán: "Accedeix", "Obté el títol", "Passa de curs" = promociona
+            # Pero NO "Roman" (permanece), "No passa", "No obté", "No accedeix"
+
+            # Filtrar promocionados (incluir los que pasan)
+            patron_promocion = r'Accedeix al curs següent|Passa de curs|Obté el títol'
+
+            # Filtrar NO promocionados (excluir explícitamente)
+            patron_no_promocion = r'Roman|No passa|No obté|No accedeix'
 
             promovidos = df_acollida[
-                df_acollida[col_consecuencias].str.contains(patron_promocion, na=False, case=False, regex=True)
+                (df_acollida[col_consecuencias].str.contains(patron_promocion, na=False, case=False, regex=True)) &
+                (~df_acollida[col_consecuencias].str.contains(patron_no_promocion, na=False, case=False, regex=True))
             ][col_numero].sum()
 
             no_promovidos = df_acollida[
-                ~df_acollida[col_consecuencias].str.contains(patron_promocion, na=False, case=False, regex=True)
+                (~df_acollida[col_consecuencias].str.contains(patron_promocion, na=False, case=False, regex=True)) |
+                (df_acollida[col_consecuencias].str.contains(patron_no_promocion, na=False, case=False, regex=True))
             ][col_numero].sum()
 
             resultado['resumen_promocion'] = {
@@ -292,10 +298,21 @@ class AnalizadorEducativo:
             stats['por_consecuencias'] = df_sudamerica.groupby(col_consecuencias)[col_numero].sum()
 
             # Calcular tasa de promoción
+            # En catalán: "Accedeix", "Obté el títol", "Passa de curs" = promociona
+            # Pero NO "Roman" (permanece), "No passa", "No obté", "No accedeix"
             total_sudamerica = df_sudamerica[col_numero].sum()
+
+            # Filtrar promocionados (incluir los que pasan)
+            patron_promocion = r'Accedeix al curs següent|Passa de curs|Obté el títol'
+
+            # Filtrar NO promocionados (excluir explícitamente)
+            patron_no_promocion = r'Roman|No passa|No obté|No accedeix'
+
             promovidos = df_sudamerica[
-                df_sudamerica[col_consecuencias].str.contains('Promociona', na=False)
+                (df_sudamerica[col_consecuencias].str.contains(patron_promocion, na=False, case=False, regex=True)) &
+                (~df_sudamerica[col_consecuencias].str.contains(patron_no_promocion, na=False, case=False, regex=True))
             ][col_numero].sum()
+
             stats['tasa_promocion'] = (promovidos / total_sudamerica * 100) if total_sudamerica > 0 else 0
 
         return stats
@@ -503,16 +520,23 @@ class AnalizadorEducativo:
             if len(df_grupo) > 0:
                 total = df_grupo[col_numero].sum()
 
-                # En catalán: "Accedeix", "curs següent" o "Passa de curs" = promociona
-                # Pero NO "No passa de curs" (no pasa de curso)
-                patron_promocion = r'(?<!No )(?:Accedeix|curs següent|Passa de curs)'
+                # En catalán: "Accedeix", "Obté el títol", "Passa de curs" = promociona
+                # Pero NO "Roman" (permanece), "No passa", "No obté", "No accedeix"
+
+                # Filtrar promocionados (incluir los que pasan)
+                patron_promocion = r'Accedeix al curs següent|Passa de curs|Obté el títol'
+
+                # Filtrar NO promocionados (excluir explícitamente)
+                patron_no_promocion = r'Roman|No passa|No obté|No accedeix'
+
                 promovidos = df_grupo[
-                    df_grupo[col_consecuencias].str.contains(patron_promocion, na=False, case=False, regex=True)
+                    (df_grupo[col_consecuencias].str.contains(patron_promocion, na=False, case=False, regex=True)) &
+                    (~df_grupo[col_consecuencias].str.contains(patron_no_promocion, na=False, case=False, regex=True))
                 ][col_numero].sum()
 
-                # Repiten: buscar "Repeteix" o "Repetir" o "No passa"
+                # Repiten: buscar "Roman", "Repeteix", "Repetir", "No passa"
                 repiten = df_grupo[
-                    df_grupo[col_consecuencias].str.contains('Repeteix|Repetir|No passa', na=False, case=False, regex=True)
+                    df_grupo[col_consecuencias].str.contains('Roman|Repeteix|Repetir|No passa', na=False, case=False, regex=True)
                 ][col_numero].sum()
 
                 resultados[grupo] = {
@@ -979,10 +1003,15 @@ class VentanaAnalisis:
                     texto += f"  Nivel {nivel}: {total:,} estudiantes\n"
 
             if 'por_consecuencias' in stats_acollida:
-                texto += f"\nPrincipales consecuencias:\n"
-                top_consec = stats_acollida['por_consecuencias'].sort_values(ascending=False).head(5)
-                for consec, total in top_consec.items():
-                    texto += f"  {consec}: {total:,}\n"
+                texto += f"\nDistribución por consecuencias:\n"
+                all_consec = stats_acollida['por_consecuencias'].sort_values(ascending=False)
+                total_acollida = stats_acollida.get('total_acollida', all_consec.sum())
+                for consec, total in all_consec.items():
+                    porcentaje = (total / total_acollida * 100) if total_acollida > 0 else 0
+                    texto += f"  {consec}: {total:,} ({porcentaje:.1f}%)\n"
+                # Verificación
+                suma_consec = all_consec.sum()
+                texto += f"\n  Total verificado: {suma_consec:,} estudiantes\n"
         elif stats_acollida and 'por_aula_acollida' in stats_acollida:
             texto += f"\nResumen general:\n"
             for aula, total in stats_acollida['por_aula_acollida'].items():
@@ -1009,10 +1038,14 @@ class VentanaAnalisis:
                     texto += f"  Nivel {nivel}: {total:,} estudiantes\n"
 
             if 'por_consecuencias' in stats_sudamerica:
-                texto += f"\nPrincipales consecuencias:\n"
-                top_consec = stats_sudamerica['por_consecuencias'].sort_values(ascending=False).head(5)
-                for consec, total in top_consec.items():
-                    texto += f"  {consec}: {total:,}\n"
+                texto += f"\nDistribución por consecuencias:\n"
+                all_consec = stats_sudamerica['por_consecuencias'].sort_values(ascending=False)
+                for consec, total in all_consec.items():
+                    porcentaje = (total / stats_sudamerica['total_estudiantes'] * 100)
+                    texto += f"  {consec}: {total:,} ({porcentaje:.1f}%)\n"
+                # Verificación
+                suma_consec = all_consec.sum()
+                texto += f"\n  Total verificado: {suma_consec:,} estudiantes\n"
         else:
             texto += "\nNo hay datos de CENTRE I SUDAMÈRICA en este archivo.\n"
 
@@ -1046,6 +1079,75 @@ class VentanaAnalisis:
                     col_mit = [c for c in df_resumen.columns if 'mitjana' in c][0]
                     texto += f"  Nivel {nivel}: {row[col_num]:,.0f} alumnos, media {row[col_mit]:.2f}\n"
 
+        # NUEVA SECCIÓN: Evolución entre niveles
+        texto += f"\n{'='*70}\n"
+        texto += "📈 EVOLUCIÓN ENTRE NIVELES (4º → 6º)\n"
+        texto += f"{'='*70}\n"
+
+        if resumen_nivel:
+            for lengua, df_resumen in resumen_nivel.items():
+                if len(df_resumen) >= 2:
+                    col_mit = [c for c in df_resumen.columns if 'mitjana' in c][0]
+                    niveles = sorted(df_resumen.index)
+
+                    if len(niveles) == 2:
+                        nivel_4 = df_resumen.loc[niveles[0], col_mit]
+                        nivel_6 = df_resumen.loc[niveles[1], col_mit]
+                        diferencia = nivel_6 - nivel_4
+
+                        texto += f"\n{lengua}:\n"
+                        texto += f"  Nivel {niveles[0]}: {nivel_4:.2f}\n"
+                        texto += f"  Nivel {niveles[1]}: {nivel_6:.2f}\n"
+                        texto += f"  Diferencia: {diferencia:+.2f} puntos "
+
+                        if diferencia > 0:
+                            texto += "(✅ mejora)\n"
+                        elif diferencia < 0:
+                            texto += "(⚠️ empeora)\n"
+                        else:
+                            texto += "(→ se mantiene)\n"
+
+                        porcentaje_cambio = (diferencia / nivel_4 * 100) if nivel_4 > 0 else 0
+                        texto += f"  Cambio porcentual: {porcentaje_cambio:+.2f}%\n"
+
+        # NUEVA SECCIÓN: Distribución por rangos de notas
+        texto += f"\n{'='*70}\n"
+        texto += "📊 DISTRIBUCIÓN POR RANGOS DE NOTAS\n"
+        texto += f"{'='*70}\n"
+
+        # Calcular rangos para cada lengua
+        if self.analizador.df_actual is not None:
+            col_catala = self.analizador.buscar_columna(['Català', 'competència'])
+            col_castella = self.analizador.buscar_columna(['Castellà', 'competència'])
+            col_numero = self.analizador.buscar_columna(['mero', 'avaluats'])
+
+            if col_numero:
+                for nombre_lengua, col_lengua in [('Català', col_catala), ('Castellà', col_castella)]:
+                    if col_lengua:
+                        df_lengua = self.analizador.df_actual[[col_lengua, col_numero]].copy()
+                        df_lengua = df_lengua[df_lengua[col_lengua].notna()]
+
+                        # Definir rangos
+                        total = df_lengua[col_numero].sum()
+                        if total > 0:
+                            texto += f"\n{nombre_lengua}:\n"
+
+                            # Suspenso (0-49)
+                            suspensos = df_lengua[df_lengua[col_lengua] < 50][col_numero].sum()
+                            texto += f"  Suspenso (0-49):  {suspensos:>8,.0f} ({suspensos/total*100:5.1f}%)\n"
+
+                            # Aprobado (50-69)
+                            aprobados = df_lengua[(df_lengua[col_lengua] >= 50) & (df_lengua[col_lengua] < 70)][col_numero].sum()
+                            texto += f"  Aprobado (50-69): {aprobados:>8,.0f} ({aprobados/total*100:5.1f}%)\n"
+
+                            # Notable (70-89)
+                            notables = df_lengua[(df_lengua[col_lengua] >= 70) & (df_lengua[col_lengua] < 90)][col_numero].sum()
+                            texto += f"  Notable (70-89):  {notables:>8,.0f} ({notables/total*100:5.1f}%)\n"
+
+                            # Excelente (90-100)
+                            excelentes = df_lengua[df_lengua[col_lengua] >= 90][col_numero].sum()
+                            texto += f"  Excelente (90-100):{excelentes:>8,.0f} ({excelentes/total*100:5.1f}%)\n"
+
         # NUEVA SECCIÓN: Análisis específico de CENTRE I SUDAMÈRICA
         texto += f"\n{'='*70}\n"
         texto += "📊 ANÁLISIS ESPECÍFICO: CENTRE I SUDAMÈRICA\n"
@@ -1058,6 +1160,20 @@ class VentanaAnalisis:
                 texto += f"  Total alumnos: {datos['total_alumnos']:,.0f}\n"
                 texto += f"  Media: {datos['media']:.2f}\n"
                 texto += f"  Mediana: {datos['mediana']:.2f}\n"
+
+                # Añadir comparativa con media global
+                if stats_comp and lengua in stats_comp:
+                    media_global = stats_comp[lengua]['media_global']
+                    diferencia = datos['media'] - media_global
+                    texto += f"  Media global: {media_global:.2f}\n"
+                    texto += f"  Diferencia: {diferencia:+.2f} puntos "
+
+                    if abs(diferencia) < 2:
+                        texto += "(→ similar)\n"
+                    elif diferencia > 0:
+                        texto += "(✅ superior)\n"
+                    else:
+                        texto += "(⚠️ inferior)\n"
         else:
             texto += "\nNo hay datos de CENTRE I SUDAMÈRICA en este archivo.\n"
 
@@ -1968,9 +2084,10 @@ class VentanaAnalisis:
 
             tasas_por_nac[nac]['total'] += total
 
-            # En catalán: "Accedeix", "curs següent" o "Passa de curs" = promociona
-            # Pero NO "No passa de curs" (no pasa de curso)
-            if ('Accedeix' in consec or 'curs següent' in consec.lower() or 'Passa de curs' in consec) and 'No passa' not in consec:
+            # En catalán: "Accedeix", "Obté el títol", "Passa de curs" = promociona
+            # Pero NO "Roman" (permanece), "No passa", "No obté", "No accedeix"
+            if (('Accedeix al curs següent' in consec or 'Passa de curs' in consec or 'Obté el títol' in consec) and
+                ('Roman' not in consec and 'No passa' not in consec and 'No obté' not in consec and 'No accedeix' not in consec)):
                 tasas_por_nac[nac]['promocionan'] += total
 
         # Calcular porcentajes
