@@ -413,6 +413,102 @@ class AnalizadorEducativo:
 
             return stats if stats else None
 
+    def obtener_competencias_espana(self, por_nivel=False):
+        """Obtiene competencias específicas de estudiantes de ESPAÑA
+
+        Args:
+            por_nivel: Si es True, devuelve estadísticas separadas por nivel
+        """
+        if self.df_actual is None:
+            return None
+
+        col_nacionalidad = self.buscar_columna(['Zona', 'nacionalitat'])
+        if col_nacionalidad is None:
+            return None
+
+        # Filtrar por ESPAÑA (puede aparecer como ESPANYA, ESPAÑA, etc.)
+        df_espana = self.df_actual[
+            self.df_actual[col_nacionalidad].str.contains('ESPAN', na=False, case=False)
+        ]
+
+        if len(df_espana) == 0:
+            return None
+
+        if por_nivel and 'Nivell' in df_espana.columns:
+            # Devolver estadísticas separadas por nivel
+            stats_por_nivel = {}
+
+            for nivel in sorted(df_espana['Nivell'].unique()):
+                df_nivel = df_espana[df_espana['Nivell'] == nivel]
+                stats = {}
+
+                # Català
+                col_num_cat = self.buscar_columna(['mero', 'alumnes', 'Catal'])
+                col_mit_cat = self.buscar_columna(['Catal', 'mitjana'])
+
+                if col_num_cat and col_mit_cat:
+                    mitjana_cat_num = pd.to_numeric(df_nivel[col_mit_cat], errors='coerce')
+                    num_cat_num = pd.to_numeric(df_nivel[col_num_cat], errors='coerce')
+
+                    stats['Català'] = {
+                        'total_alumnos': num_cat_num.sum(),
+                        'media': mitjana_cat_num.mean(),
+                        'mediana': mitjana_cat_num.median()
+                    }
+
+                # Castellà
+                col_num_cas = self.buscar_columna(['mero', 'alumnes', 'Castell'])
+                col_mit_cas = self.buscar_columna(['Castell', 'mitjana'])
+
+                if col_num_cas and col_mit_cas:
+                    mitjana_cas_num = pd.to_numeric(df_nivel[col_mit_cas], errors='coerce')
+                    num_cas_num = pd.to_numeric(df_nivel[col_num_cas], errors='coerce')
+
+                    stats['Castellà'] = {
+                        'total_alumnos': num_cas_num.sum(),
+                        'media': mitjana_cas_num.mean(),
+                        'mediana': mitjana_cas_num.median()
+                    }
+
+                if stats:
+                    stats_por_nivel[nivel] = stats
+
+            return stats_por_nivel if stats_por_nivel else None
+
+        else:
+            # Devolver estadísticas globales (comportamiento original)
+            stats = {}
+
+            # Català
+            col_num_cat = self.buscar_columna(['mero', 'alumnes', 'Catal'])
+            col_mit_cat = self.buscar_columna(['Catal', 'mitjana'])
+
+            if col_num_cat and col_mit_cat:
+                mitjana_cat_num = pd.to_numeric(df_espana[col_mit_cat], errors='coerce')
+                num_cat_num = pd.to_numeric(df_espana[col_num_cat], errors='coerce')
+
+                stats['Català'] = {
+                    'total_alumnos': num_cat_num.sum(),
+                    'media': mitjana_cat_num.mean(),
+                    'mediana': mitjana_cat_num.median()
+                }
+
+            # Castellà
+            col_num_cas = self.buscar_columna(['mero', 'alumnes', 'Castell'])
+            col_mit_cas = self.buscar_columna(['Castell', 'mitjana'])
+
+            if col_num_cas and col_mit_cas:
+                mitjana_cas_num = pd.to_numeric(df_espana[col_mit_cas], errors='coerce')
+                num_cas_num = pd.to_numeric(df_espana[col_num_cas], errors='coerce')
+
+                stats['Castellà'] = {
+                    'total_alumnos': num_cas_num.sum(),
+                    'media': mitjana_cas_num.mean(),
+                    'mediana': mitjana_cas_num.median()
+                }
+
+            return stats if stats else None
+
     # ========== MÉTODOS PARA CSV DE COMPETENCIAS ==========
 
     def obtener_resumen_por_nivel_competencias(self):
@@ -1264,6 +1360,76 @@ class VentanaAnalisis:
                             texto += "→\n"
         else:
             texto += "\nNo hay datos de CENTRE I SUDAMÈRICA en este archivo.\n"
+
+        # NUEVA SECCIÓN: Análisis específico de ESPAÑA
+        texto += f"\n{'='*70}\n"
+        texto += "📊 ANÁLISIS ESPECÍFICO: ESPAÑA\n"
+        texto += f"{'='*70}\n"
+
+        # Obtener estadísticas por nivel
+        stats_espana_por_nivel = self.analizador.obtener_competencias_espana(por_nivel=True)
+
+        if stats_espana_por_nivel:
+            # Obtener también las medias globales por nivel para comparación
+            resumen_nivel = self.analizador.obtener_resumen_por_nivel_competencias()
+
+            for nivel in sorted(stats_espana_por_nivel.keys()):
+                texto += f"\n--- Nivel {nivel} ---\n"
+                stats_nivel = stats_espana_por_nivel[nivel]
+
+                for lengua, datos in stats_nivel.items():
+                    texto += f"\n{lengua}:\n"
+                    texto += f"  Total alumnos: {datos['total_alumnos']:,.0f}\n"
+                    texto += f"  Media: {datos['media']:.2f}\n"
+                    texto += f"  Mediana: {datos['mediana']:.2f}\n"
+
+                    # Añadir comparativa con media global del mismo nivel
+                    if resumen_nivel and lengua in resumen_nivel:
+                        df_resumen = resumen_nivel[lengua]
+                        if nivel in df_resumen.index:
+                            col_mit = [c for c in df_resumen.columns if 'mitjana' in c][0]
+                            media_global_nivel = df_resumen.loc[nivel, col_mit]
+                            diferencia = datos['media'] - media_global_nivel
+                            texto += f"  Media global (Nivel {nivel}): {media_global_nivel:.2f}\n"
+                            texto += f"  Diferencia: {diferencia:+.2f} puntos "
+
+                            if abs(diferencia) < 2:
+                                texto += "(→ similar)\n"
+                            elif diferencia > 0:
+                                texto += "(✅ superior)\n"
+                            else:
+                                texto += "(⚠️ inferior)\n"
+
+            # Añadir análisis de evolución entre niveles para ESPAÑA
+            niveles_ordenados = sorted(stats_espana_por_nivel.keys())
+            if len(niveles_ordenados) >= 2:
+                texto += f"\n{'─'*70}\n"
+                texto += f"📈 Evolución ESPAÑA ({niveles_ordenados[0]} → {niveles_ordenados[-1]}):\n"
+                texto += f"{'─'*70}\n"
+
+                nivel_inicial = niveles_ordenados[0]
+                nivel_final = niveles_ordenados[-1]
+
+                for lengua in stats_espana_por_nivel[nivel_inicial].keys():
+                    if lengua in stats_espana_por_nivel[nivel_final]:
+                        media_inicial = stats_espana_por_nivel[nivel_inicial][lengua]['media']
+                        media_final = stats_espana_por_nivel[nivel_final][lengua]['media']
+                        diferencia = media_final - media_inicial
+                        porcentaje = (diferencia / media_inicial * 100) if media_inicial > 0 else 0
+
+                        texto += f"\n{lengua}:\n"
+                        texto += f"  Nivel {nivel_inicial}: {media_inicial:.2f}\n"
+                        texto += f"  Nivel {nivel_final}: {media_final:.2f}\n"
+                        texto += f"  Cambio: {diferencia:+.2f} puntos ({porcentaje:+.2f}%) "
+
+                        if diferencia > 0:
+                            texto += "✅\n"
+                        elif diferencia < 0:
+                            texto += "⚠️\n"
+                        else:
+                            texto += "→\n"
+        else:
+            texto += "\nNo hay datos de ESPAÑA en este archivo.\n"
 
         return texto
 
