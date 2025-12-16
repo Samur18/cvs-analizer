@@ -317,6 +317,57 @@ class AnalizadorEducativo:
 
         return stats
 
+    def obtener_estadisticas_espana(self):
+        """Obtiene estadísticas específicas de estudiantes de ESPAÑA (nativos)"""
+        if self.df_actual is None:
+            return None
+
+        col_nacionalidad = self.buscar_columna(['Zona', 'Nacionalitat'])
+        col_numero = self.buscar_columna(['mero', 'Avalua'])
+
+        if col_nacionalidad is None or col_numero is None:
+            return None
+
+        # Filtrar por ESPAÑA (ESPANYA)
+        df_espana = self.df_actual[
+            self.df_actual[col_nacionalidad].str.contains('ESPAN', na=False, case=False)
+        ]
+
+        if len(df_espana) == 0:
+            return None
+
+        stats = {
+            'total_estudiantes': df_espana[col_numero].sum(),
+            'porcentaje_total': (df_espana[col_numero].sum() / self.df_actual[col_numero].sum() * 100),
+        }
+
+        # Por nivel
+        if 'Nivell' in df_espana.columns:
+            stats['por_nivel'] = df_espana.groupby('Nivell')[col_numero].sum()
+
+        # Por consecuencias
+        col_consecuencias = self.buscar_columna(['Conseq', 'Avalua'])
+        if col_consecuencias:
+            stats['por_consecuencias'] = df_espana.groupby(col_consecuencias)[col_numero].sum()
+
+            # Calcular tasa de promoción
+            total_espana = df_espana[col_numero].sum()
+
+            # Filtrar promocionados (incluir los que pasan)
+            patron_promocion = r'Accedeix al curs següent|Passa de curs|Obté el títol'
+
+            # Filtrar NO promocionados (excluir explícitamente)
+            patron_no_promocion = r'Roman|No passa|No obté|No accedeix'
+
+            promovidos = df_espana[
+                (df_espana[col_consecuencias].str.contains(patron_promocion, na=False, case=False, regex=True)) &
+                (~df_espana[col_consecuencias].str.contains(patron_no_promocion, na=False, case=False, regex=True))
+            ][col_numero].sum()
+
+            stats['tasa_promocion'] = (promovidos / total_espana * 100) if total_espana > 0 else 0
+
+        return stats
+
     def obtener_competencias_sudamerica(self, por_nivel=False):
         """Obtiene competencias específicas de CENTRE I SUDAMÈRICA
 
@@ -354,11 +405,26 @@ class AnalizadorEducativo:
                     mitjana_cat_num = pd.to_numeric(df_nivel[col_mit_cat], errors='coerce')
                     num_cat_num = pd.to_numeric(df_nivel[col_num_cat], errors='coerce')
 
-                    stats['Català'] = {
-                        'total_alumnos': num_cat_num.sum(),
-                        'media': mitjana_cat_num.mean(),
-                        'mediana': mitjana_cat_num.median()
-                    }
+                    # Filtrar valores válidos (no NaN) para calcular media ponderada
+                    df_validos = df_nivel[[col_num_cat, col_mit_cat]].copy()
+                    df_validos['num'] = num_cat_num
+                    df_validos['mit'] = mitjana_cat_num
+                    df_validos = df_validos.dropna(subset=['num', 'mit'])
+
+                    if len(df_validos) > 0:
+                        # Media ponderada: sum(num_alumnos * media) / sum(num_alumnos)
+                        media_ponderada = (df_validos['num'] * df_validos['mit']).sum() / df_validos['num'].sum()
+                        stats['Català'] = {
+                            'total_alumnos': num_cat_num.sum(),
+                            'media': media_ponderada,
+                            'mediana': mitjana_cat_num.median()
+                        }
+                    else:
+                        stats['Català'] = {
+                            'total_alumnos': num_cat_num.sum(),
+                            'media': None,
+                            'mediana': None
+                        }
 
                 # Castellà
                 col_num_cas = self.buscar_columna(['mero', 'alumnes', 'Castell'])
@@ -368,11 +434,26 @@ class AnalizadorEducativo:
                     mitjana_cas_num = pd.to_numeric(df_nivel[col_mit_cas], errors='coerce')
                     num_cas_num = pd.to_numeric(df_nivel[col_num_cas], errors='coerce')
 
-                    stats['Castellà'] = {
-                        'total_alumnos': num_cas_num.sum(),
-                        'media': mitjana_cas_num.mean(),
-                        'mediana': mitjana_cas_num.median()
-                    }
+                    # Filtrar valores válidos (no NaN) para calcular media ponderada
+                    df_validos = df_nivel[[col_num_cas, col_mit_cas]].copy()
+                    df_validos['num'] = num_cas_num
+                    df_validos['mit'] = mitjana_cas_num
+                    df_validos = df_validos.dropna(subset=['num', 'mit'])
+
+                    if len(df_validos) > 0:
+                        # Media ponderada: sum(num_alumnos * media) / sum(num_alumnos)
+                        media_ponderada = (df_validos['num'] * df_validos['mit']).sum() / df_validos['num'].sum()
+                        stats['Castellà'] = {
+                            'total_alumnos': num_cas_num.sum(),
+                            'media': media_ponderada,
+                            'mediana': mitjana_cas_num.median()
+                        }
+                    else:
+                        stats['Castellà'] = {
+                            'total_alumnos': num_cas_num.sum(),
+                            'media': None,
+                            'mediana': None
+                        }
 
                 if stats:
                     stats_por_nivel[nivel] = stats
@@ -391,11 +472,20 @@ class AnalizadorEducativo:
                 mitjana_cat_num = pd.to_numeric(df_sudamerica[col_mit_cat], errors='coerce')
                 num_cat_num = pd.to_numeric(df_sudamerica[col_num_cat], errors='coerce')
 
-                stats['Català'] = {
-                    'total_alumnos': num_cat_num.sum(),
-                    'media': mitjana_cat_num.mean(),
-                    'mediana': mitjana_cat_num.median()
-                }
+                # Filtrar valores válidos (no NaN) para calcular media ponderada
+                df_validos = df_sudamerica[[col_num_cat, col_mit_cat]].copy()
+                df_validos['num'] = num_cat_num
+                df_validos['mit'] = mitjana_cat_num
+                df_validos = df_validos.dropna(subset=['num', 'mit'])
+
+                if len(df_validos) > 0:
+                    # Media ponderada: sum(num_alumnos * media) / sum(num_alumnos)
+                    media_ponderada = (df_validos['num'] * df_validos['mit']).sum() / df_validos['num'].sum()
+                    stats['Català'] = {
+                        'total_alumnos': num_cat_num.sum(),
+                        'media': media_ponderada,
+                        'mediana': mitjana_cat_num.median()
+                    }
 
             # Castellà
             col_num_cas = self.buscar_columna(['mero', 'alumnes', 'Castell'])
@@ -405,11 +495,20 @@ class AnalizadorEducativo:
                 mitjana_cas_num = pd.to_numeric(df_sudamerica[col_mit_cas], errors='coerce')
                 num_cas_num = pd.to_numeric(df_sudamerica[col_num_cas], errors='coerce')
 
-                stats['Castellà'] = {
-                    'total_alumnos': num_cas_num.sum(),
-                    'media': mitjana_cas_num.mean(),
-                    'mediana': mitjana_cas_num.median()
-                }
+                # Filtrar valores válidos (no NaN) para calcular media ponderada
+                df_validos = df_sudamerica[[col_num_cas, col_mit_cas]].copy()
+                df_validos['num'] = num_cas_num
+                df_validos['mit'] = mitjana_cas_num
+                df_validos = df_validos.dropna(subset=['num', 'mit'])
+
+                if len(df_validos) > 0:
+                    # Media ponderada: sum(num_alumnos * media) / sum(num_alumnos)
+                    media_ponderada = (df_validos['num'] * df_validos['mit']).sum() / df_validos['num'].sum()
+                    stats['Castellà'] = {
+                        'total_alumnos': num_cas_num.sum(),
+                        'media': media_ponderada,
+                        'mediana': mitjana_cas_num.median()
+                    }
 
             return stats if stats else None
 
@@ -450,11 +549,26 @@ class AnalizadorEducativo:
                     mitjana_cat_num = pd.to_numeric(df_nivel[col_mit_cat], errors='coerce')
                     num_cat_num = pd.to_numeric(df_nivel[col_num_cat], errors='coerce')
 
-                    stats['Català'] = {
-                        'total_alumnos': num_cat_num.sum(),
-                        'media': mitjana_cat_num.mean(),
-                        'mediana': mitjana_cat_num.median()
-                    }
+                    # Filtrar valores válidos (no NaN) para calcular media ponderada
+                    df_validos = df_nivel[[col_num_cat, col_mit_cat]].copy()
+                    df_validos['num'] = num_cat_num
+                    df_validos['mit'] = mitjana_cat_num
+                    df_validos = df_validos.dropna(subset=['num', 'mit'])
+
+                    if len(df_validos) > 0:
+                        # Media ponderada: sum(num_alumnos * media) / sum(num_alumnos)
+                        media_ponderada = (df_validos['num'] * df_validos['mit']).sum() / df_validos['num'].sum()
+                        stats['Català'] = {
+                            'total_alumnos': num_cat_num.sum(),
+                            'media': media_ponderada,
+                            'mediana': mitjana_cat_num.median()
+                        }
+                    else:
+                        stats['Català'] = {
+                            'total_alumnos': num_cat_num.sum(),
+                            'media': None,
+                            'mediana': None
+                        }
 
                 # Castellà
                 col_num_cas = self.buscar_columna(['mero', 'alumnes', 'Castell'])
@@ -464,11 +578,26 @@ class AnalizadorEducativo:
                     mitjana_cas_num = pd.to_numeric(df_nivel[col_mit_cas], errors='coerce')
                     num_cas_num = pd.to_numeric(df_nivel[col_num_cas], errors='coerce')
 
-                    stats['Castellà'] = {
-                        'total_alumnos': num_cas_num.sum(),
-                        'media': mitjana_cas_num.mean(),
-                        'mediana': mitjana_cas_num.median()
-                    }
+                    # Filtrar valores válidos (no NaN) para calcular media ponderada
+                    df_validos = df_nivel[[col_num_cas, col_mit_cas]].copy()
+                    df_validos['num'] = num_cas_num
+                    df_validos['mit'] = mitjana_cas_num
+                    df_validos = df_validos.dropna(subset=['num', 'mit'])
+
+                    if len(df_validos) > 0:
+                        # Media ponderada: sum(num_alumnos * media) / sum(num_alumnos)
+                        media_ponderada = (df_validos['num'] * df_validos['mit']).sum() / df_validos['num'].sum()
+                        stats['Castellà'] = {
+                            'total_alumnos': num_cas_num.sum(),
+                            'media': media_ponderada,
+                            'mediana': mitjana_cas_num.median()
+                        }
+                    else:
+                        stats['Castellà'] = {
+                            'total_alumnos': num_cas_num.sum(),
+                            'media': None,
+                            'mediana': None
+                        }
 
                 if stats:
                     stats_por_nivel[nivel] = stats
@@ -487,11 +616,20 @@ class AnalizadorEducativo:
                 mitjana_cat_num = pd.to_numeric(df_espana[col_mit_cat], errors='coerce')
                 num_cat_num = pd.to_numeric(df_espana[col_num_cat], errors='coerce')
 
-                stats['Català'] = {
-                    'total_alumnos': num_cat_num.sum(),
-                    'media': mitjana_cat_num.mean(),
-                    'mediana': mitjana_cat_num.median()
-                }
+                # Filtrar valores válidos (no NaN) para calcular media ponderada
+                df_validos = df_espana[[col_num_cat, col_mit_cat]].copy()
+                df_validos['num'] = num_cat_num
+                df_validos['mit'] = mitjana_cat_num
+                df_validos = df_validos.dropna(subset=['num', 'mit'])
+
+                if len(df_validos) > 0:
+                    # Media ponderada: sum(num_alumnos * media) / sum(num_alumnos)
+                    media_ponderada = (df_validos['num'] * df_validos['mit']).sum() / df_validos['num'].sum()
+                    stats['Català'] = {
+                        'total_alumnos': num_cat_num.sum(),
+                        'media': media_ponderada,
+                        'mediana': mitjana_cat_num.median()
+                    }
 
             # Castellà
             col_num_cas = self.buscar_columna(['mero', 'alumnes', 'Castell'])
@@ -501,11 +639,20 @@ class AnalizadorEducativo:
                 mitjana_cas_num = pd.to_numeric(df_espana[col_mit_cas], errors='coerce')
                 num_cas_num = pd.to_numeric(df_espana[col_num_cas], errors='coerce')
 
-                stats['Castellà'] = {
-                    'total_alumnos': num_cas_num.sum(),
-                    'media': mitjana_cas_num.mean(),
-                    'mediana': mitjana_cas_num.median()
-                }
+                # Filtrar valores válidos (no NaN) para calcular media ponderada
+                df_validos = df_espana[[col_num_cas, col_mit_cas]].copy()
+                df_validos['num'] = num_cas_num
+                df_validos['mit'] = mitjana_cas_num
+                df_validos = df_validos.dropna(subset=['num', 'mit'])
+
+                if len(df_validos) > 0:
+                    # Media ponderada: sum(num_alumnos * media) / sum(num_alumnos)
+                    media_ponderada = (df_validos['num'] * df_validos['mit']).sum() / df_validos['num'].sum()
+                    stats['Castellà'] = {
+                        'total_alumnos': num_cas_num.sum(),
+                        'media': media_ponderada,
+                        'mediana': mitjana_cas_num.median()
+                    }
 
             return stats if stats else None
 
@@ -924,6 +1071,10 @@ class VentanaAnalisis:
             ttk.Button(self.frame_controles_graficos, text="📊 Análisis Sudamérica",
                        command=self.grafico_sudamerica_evaluacion).grid(row=0, column=4, padx=5)
 
+            # NUEVO: Botón específico para España (nativos)
+            ttk.Button(self.frame_controles_graficos, text="🇪🇸 Análisis España",
+                       command=self.grafico_espana_evaluacion).grid(row=0, column=5, padx=5)
+
         elif self.analizador.tipo_csv_actual == TipoCSV.COMPETENCIAS:
             # Botones para CSV de Competencias
             ttk.Button(self.frame_controles_graficos, text="Gráfico Medias por Nivel",
@@ -1192,6 +1343,36 @@ class VentanaAnalisis:
         else:
             texto += "\nNo hay datos de CENTRE I SUDAMÈRICA en este archivo.\n"
 
+        # NUEVA SECCIÓN: Análisis específico de ESPAÑA (nativos)
+        texto += f"\n{'='*70}\n"
+        texto += "🇪🇸 ANÁLISIS ESPECÍFICO: ESPAÑA (Estudiantes Nativos)\n"
+        texto += f"{'='*70}\n"
+
+        stats_espana = self.analizador.obtener_estadisticas_espana()
+        if stats_espana:
+            texto += f"\nTotal estudiantes: {stats_espana['total_estudiantes']:,}\n"
+            texto += f"Porcentaje del total: {stats_espana['porcentaje_total']:.2f}%\n"
+
+            if 'tasa_promocion' in stats_espana:
+                texto += f"Tasa de promoción: {stats_espana['tasa_promocion']:.2f}%\n"
+
+            if 'por_nivel' in stats_espana:
+                texto += f"\nDistribución por nivel:\n"
+                for nivel, total in stats_espana['por_nivel'].items():
+                    texto += f"  Nivel {nivel}: {total:,} estudiantes\n"
+
+            if 'por_consecuencias' in stats_espana:
+                texto += f"\nDistribución por consecuencias:\n"
+                all_consec = stats_espana['por_consecuencias'].sort_values(ascending=False)
+                for consec, total in all_consec.items():
+                    porcentaje = (total / stats_espana['total_estudiantes'] * 100)
+                    texto += f"  {consec}: {total:,} ({porcentaje:.1f}%)\n"
+                # Verificación
+                suma_consec = all_consec.sum()
+                texto += f"\n  Total verificado: {suma_consec:,} estudiantes\n"
+        else:
+            texto += "\nNo hay datos de estudiantes de ESPAÑA en este archivo.\n"
+
         return texto
 
     def generar_resumen_competencias(self):
@@ -1310,11 +1491,20 @@ class VentanaAnalisis:
                 for lengua, datos in stats_nivel.items():
                     texto += f"\n{lengua}:\n"
                     texto += f"  Total alumnos: {datos['total_alumnos']:,.0f}\n"
-                    texto += f"  Media: {datos['media']:.2f}\n"
-                    texto += f"  Mediana: {datos['mediana']:.2f}\n"
 
-                    # Añadir comparativa con media global del mismo nivel
-                    if resumen_nivel and lengua in resumen_nivel:
+                    # Manejar valores None
+                    if datos['media'] is not None:
+                        texto += f"  Media: {datos['media']:.2f}\n"
+                    else:
+                        texto += f"  Media: No disponible (sin datos válidos)\n"
+
+                    if datos['mediana'] is not None:
+                        texto += f"  Mediana: {datos['mediana']:.2f}\n"
+                    else:
+                        texto += f"  Mediana: No disponible (sin datos válidos)\n"
+
+                    # Añadir comparativa con media global del mismo nivel (solo si hay datos)
+                    if datos['media'] is not None and resumen_nivel and lengua in resumen_nivel:
                         df_resumen = resumen_nivel[lengua]
                         if nivel in df_resumen.index:
                             col_mit = [c for c in df_resumen.columns if 'mitjana' in c][0]
@@ -1344,20 +1534,37 @@ class VentanaAnalisis:
                     if lengua in stats_sudamerica_por_nivel[nivel_final]:
                         media_inicial = stats_sudamerica_por_nivel[nivel_inicial][lengua]['media']
                         media_final = stats_sudamerica_por_nivel[nivel_final][lengua]['media']
-                        diferencia = media_final - media_inicial
-                        porcentaje = (diferencia / media_inicial * 100) if media_inicial > 0 else 0
 
                         texto += f"\n{lengua}:\n"
-                        texto += f"  Nivel {nivel_inicial}: {media_inicial:.2f}\n"
-                        texto += f"  Nivel {nivel_final}: {media_final:.2f}\n"
-                        texto += f"  Cambio: {diferencia:+.2f} puntos ({porcentaje:+.2f}%) "
 
-                        if diferencia > 0:
-                            texto += "✅\n"
-                        elif diferencia < 0:
-                            texto += "⚠️\n"
+                        # Solo calcular diferencia si ambos valores existen
+                        if media_inicial is not None and media_final is not None:
+                            diferencia = media_final - media_inicial
+                            porcentaje = (diferencia / media_inicial * 100) if media_inicial > 0 else 0
+
+                            texto += f"  Nivel {nivel_inicial}: {media_inicial:.2f}\n"
+                            texto += f"  Nivel {nivel_final}: {media_final:.2f}\n"
+                            texto += f"  Cambio: {diferencia:+.2f} puntos ({porcentaje:+.2f}%) "
+
+                            if diferencia > 0:
+                                texto += "✅\n"
+                            elif diferencia < 0:
+                                texto += "⚠️\n"
+                            else:
+                                texto += "→\n"
                         else:
-                            texto += "→\n"
+                            # Si alguno de los valores es None
+                            if media_inicial is not None:
+                                texto += f"  Nivel {nivel_inicial}: {media_inicial:.2f}\n"
+                            else:
+                                texto += f"  Nivel {nivel_inicial}: No disponible\n"
+
+                            if media_final is not None:
+                                texto += f"  Nivel {nivel_final}: {media_final:.2f}\n"
+                            else:
+                                texto += f"  Nivel {nivel_final}: No disponible\n"
+
+                            texto += f"  Cambio: No se puede calcular (datos insuficientes) →\n"
         else:
             texto += "\nNo hay datos de CENTRE I SUDAMÈRICA en este archivo.\n"
 
@@ -1380,11 +1587,20 @@ class VentanaAnalisis:
                 for lengua, datos in stats_nivel.items():
                     texto += f"\n{lengua}:\n"
                     texto += f"  Total alumnos: {datos['total_alumnos']:,.0f}\n"
-                    texto += f"  Media: {datos['media']:.2f}\n"
-                    texto += f"  Mediana: {datos['mediana']:.2f}\n"
 
-                    # Añadir comparativa con media global del mismo nivel
-                    if resumen_nivel and lengua in resumen_nivel:
+                    # Manejar valores None
+                    if datos['media'] is not None:
+                        texto += f"  Media: {datos['media']:.2f}\n"
+                    else:
+                        texto += f"  Media: No disponible (sin datos válidos)\n"
+
+                    if datos['mediana'] is not None:
+                        texto += f"  Mediana: {datos['mediana']:.2f}\n"
+                    else:
+                        texto += f"  Mediana: No disponible (sin datos válidos)\n"
+
+                    # Añadir comparativa con media global del mismo nivel (solo si hay datos)
+                    if datos['media'] is not None and resumen_nivel and lengua in resumen_nivel:
                         df_resumen = resumen_nivel[lengua]
                         if nivel in df_resumen.index:
                             col_mit = [c for c in df_resumen.columns if 'mitjana' in c][0]
@@ -1414,20 +1630,37 @@ class VentanaAnalisis:
                     if lengua in stats_espana_por_nivel[nivel_final]:
                         media_inicial = stats_espana_por_nivel[nivel_inicial][lengua]['media']
                         media_final = stats_espana_por_nivel[nivel_final][lengua]['media']
-                        diferencia = media_final - media_inicial
-                        porcentaje = (diferencia / media_inicial * 100) if media_inicial > 0 else 0
 
                         texto += f"\n{lengua}:\n"
-                        texto += f"  Nivel {nivel_inicial}: {media_inicial:.2f}\n"
-                        texto += f"  Nivel {nivel_final}: {media_final:.2f}\n"
-                        texto += f"  Cambio: {diferencia:+.2f} puntos ({porcentaje:+.2f}%) "
 
-                        if diferencia > 0:
-                            texto += "✅\n"
-                        elif diferencia < 0:
-                            texto += "⚠️\n"
+                        # Solo calcular diferencia si ambos valores existen
+                        if media_inicial is not None and media_final is not None:
+                            diferencia = media_final - media_inicial
+                            porcentaje = (diferencia / media_inicial * 100) if media_inicial > 0 else 0
+
+                            texto += f"  Nivel {nivel_inicial}: {media_inicial:.2f}\n"
+                            texto += f"  Nivel {nivel_final}: {media_final:.2f}\n"
+                            texto += f"  Cambio: {diferencia:+.2f} puntos ({porcentaje:+.2f}%) "
+
+                            if diferencia > 0:
+                                texto += "✅\n"
+                            elif diferencia < 0:
+                                texto += "⚠️\n"
+                            else:
+                                texto += "→\n"
                         else:
-                            texto += "→\n"
+                            # Si alguno de los valores es None
+                            if media_inicial is not None:
+                                texto += f"  Nivel {nivel_inicial}: {media_inicial:.2f}\n"
+                            else:
+                                texto += f"  Nivel {nivel_inicial}: No disponible\n"
+
+                            if media_final is not None:
+                                texto += f"  Nivel {nivel_final}: {media_final:.2f}\n"
+                            else:
+                                texto += f"  Nivel {nivel_final}: No disponible\n"
+
+                            texto += f"  Cambio: No se puede calcular (datos insuficientes) →\n"
         else:
             texto += "\nNo hay datos de ESPAÑA en este archivo.\n"
 
@@ -1889,6 +2122,99 @@ class VentanaAnalisis:
                        f'{height:.1f}', ha='center', va='bottom', fontsize=10)
 
         plt.tight_layout()
+
+        # Integrar en tkinter
+        canvas = FigureCanvasTkAgg(fig, master=self.frame_grafico)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    # ========== GRÁFICOS ESPECÍFICOS PARA ESPAÑA ==========
+
+    def grafico_espana_evaluacion(self):
+        """Genera gráfico y análisis para estudiantes de ESPAÑA (nativos)"""
+        if self.analizador.df_actual is None:
+            messagebox.showwarning("Advertencia", "No hay datos cargados")
+            return
+
+        stats_espana = self.analizador.obtener_estadisticas_espana()
+        if not stats_espana:
+            messagebox.showwarning("Advertencia", "No hay datos de estudiantes de ESPAÑA en este archivo")
+            return
+
+        # Limpiar frame anterior
+        for widget in self.frame_grafico.winfo_children():
+            widget.destroy()
+
+        # Crear figura con 2 filas
+        fig = plt.figure(figsize=(14, 10))
+        gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax2 = fig.add_subplot(gs[0, 1])
+        ax3 = fig.add_subplot(gs[1, :])
+
+        # Gráfico 1: Distribución por nivel (España vs Total)
+        if 'por_nivel' in stats_espana:
+            resumen_total = self.analizador.obtener_resumen_por_nivel_evaluacion()
+            resumen_espana = stats_espana['por_nivel']
+
+            x = np.arange(len(resumen_total))
+            width = 0.35
+
+            ax1.bar(x - width/2, resumen_total.values, width, label='Total', color='steelblue', alpha=0.7)
+            ax1.bar(x + width/2, resumen_espana.values, width, label='ESPAÑA', color='crimson')
+
+            ax1.set_xlabel('Nivel', fontsize=12)
+            ax1.set_ylabel('Número de Estudiantes', fontsize=12)
+            ax1.set_title('Comparación por Nivel', fontsize=14, fontweight='bold')
+            ax1.set_xticks(x)
+            ax1.set_xticklabels(resumen_total.index)
+            ax1.legend()
+            ax1.grid(axis='y', alpha=0.3)
+
+        # Gráfico 2: Porcentaje y Tasa de Promoción
+        categorias = ['% del Total', 'Tasa Promoción']
+        valores = [stats_espana['porcentaje_total'], stats_espana.get('tasa_promocion', 0)]
+
+        bars = ax2.bar(categorias, valores, color=['mediumseagreen', 'gold'], edgecolor='darkgreen', linewidth=2)
+        ax2.set_ylabel('Porcentaje (%)', fontsize=12)
+        ax2.set_title('Indicadores ESPAÑA', fontsize=14, fontweight='bold')
+        ax2.set_ylim(0, 100)
+        ax2.grid(axis='y', alpha=0.3)
+
+        for bar, valor in zip(bars, valores):
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height + 2,
+                    f'{valor:.1f}%', ha='center', va='bottom', fontsize=11, fontweight='bold')
+
+        # Gráfico 3: Distribución por consecuencias
+        if 'por_consecuencias' in stats_espana:
+            consecuencias = stats_espana['por_consecuencias'].sort_values(ascending=False)
+
+            # Limitar a las 8 consecuencias principales si hay muchas
+            if len(consecuencias) > 8:
+                top_consecuencias = consecuencias.head(8)
+            else:
+                top_consecuencias = consecuencias
+
+            colors = plt.cm.Set3(range(len(top_consecuencias)))
+            bars3 = ax3.bar(range(len(top_consecuencias)), top_consecuencias.values, color=colors)
+            ax3.set_xlabel('Consecuencias de Evaluación', fontsize=12)
+            ax3.set_ylabel('Número de Estudiantes', fontsize=12)
+            ax3.set_title('Distribución por Consecuencias - ESPAÑA', fontsize=14, fontweight='bold')
+            ax3.set_xticks(range(len(top_consecuencias)))
+            ax3.set_xticklabels(top_consecuencias.index, rotation=45, ha='right', fontsize=9)
+            ax3.grid(axis='y', alpha=0.3)
+
+            # Añadir valores en las barras
+            for bar, valor in zip(bars3, top_consecuencias.values):
+                height = bar.get_height()
+                porcentaje = (valor / stats_espana['total_estudiantes'] * 100)
+                ax3.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{int(valor)}\n({porcentaje:.1f}%)',
+                        ha='center', va='bottom', fontsize=9, fontweight='bold')
+
+        plt.suptitle(f'ANÁLISIS ESTUDIANTES DE ESPAÑA (Nativos) - Total: {int(stats_espana["total_estudiantes"])} estudiantes',
+                     fontsize=16, fontweight='bold', y=0.98)
 
         # Integrar en tkinter
         canvas = FigureCanvasTkAgg(fig, master=self.frame_grafico)
